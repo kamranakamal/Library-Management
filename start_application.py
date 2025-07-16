@@ -37,14 +37,14 @@ def main():
         error_msg = f"Missing dependency: {e}\n\nPlease install required packages:\npip install -r requirements.txt"
         try:
             messagebox.showerror("Import Error", error_msg)
-        except Exception:
-            print(error_msg)
+        except Exception as e:
+            print(f"{error_msg}\nAdditional details: {e}")
     except Exception as e:
         error_msg = f"Application error: {e}"
         try:
             messagebox.showerror("Error", error_msg)
-        except Exception:
-            print(error_msg)
+        except Exception as e:
+            print(f"{error_msg}\nAdditional details: {e}")
 
 if __name__ == "__main__":
     main()

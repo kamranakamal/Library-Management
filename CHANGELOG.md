@@ -1,6 +1,36 @@
 # Library Management System - Changelog
 
-## Version 1.0.5 (2024-01-XX)
+## Version 1.0.6 (2025-07-16)
+
+### Major Changes
+- **Timeslot Locker Field Redesign**
+  - Changed `lockers_available` from INTEGER count to BOOLEAN availability flag
+  - Updated database schema: `lockers_available BOOLEAN DEFAULT 0`
+  - Replaced text input with checkbox in timeslot management GUI
+  - Updated display to show "Yes/No" instead of numeric values
+  - Added database migration script for existing installations
+
+### Bug Fixes
+- **Code Quality Improvements**
+  - Fixed duplicate assignment in timeslot management (`timeslot.lockers_available = lockers`)
+  - Removed unused import warnings across multiple files
+  - Fixed f-string formatting issues in setup.py
+  - Updated bare except statements to use proper exception handling
+
+### Technical Improvements
+- Enhanced boolean handling in Timeslot model with explicit `bool()` conversion
+- Improved data validation in timeslot form to use boolean values
+- Added comprehensive migration script (`migrate_lockers.py`) for database updates
+- Better error handling and type consistency across the application
+
+### Files Modified
+1. `config/database.py` - Updated schema for boolean locker field
+2. `models/timeslot.py` - Enhanced boolean handling and data conversion
+3. `gui/timeslot_management.py` - Replaced text input with checkbox interface
+4. `migrate_lockers.py` - New migration script for database updates
+5. Various files - Code quality improvements and lint fixes
+
+## Version 1.0.5 (2025-07-16)
 
 ### Bug Fixes
 - **Validation System**
