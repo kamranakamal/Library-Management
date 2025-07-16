@@ -69,8 +69,9 @@ class TimeslotManagementFrame(ttk.Frame):
         
         # Lockers Available
         ttk.Label(form_frame, text="Lockers Available:").grid(row=row, column=0, sticky='w', pady=2)
-        self.lockers_var = tk.StringVar(value="0")
-        ttk.Entry(form_frame, textvariable=self.lockers_var, width=25).grid(row=row, column=1, pady=2)
+        self.lockers_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(form_frame, text="Yes, lockers are available", 
+                       variable=self.lockers_var).grid(row=row, column=1, sticky='w', pady=2)
         row += 1
         
         # Buttons
@@ -141,7 +142,7 @@ class TimeslotManagementFrame(ttk.Frame):
                     timeslot.end_time,
                     f"₹{timeslot.price}",
                     f"{timeslot.duration_months} months",
-                    timeslot.lockers_available,
+                    "Yes" if timeslot.lockers_available else "No",
                     f"{occupancy_rate:.1f}%"
                 ))
         except Exception as e:
@@ -167,7 +168,7 @@ class TimeslotManagementFrame(ttk.Frame):
                 self.end_time_var.set(timeslot.end_time)
                 self.price_var.set(str(timeslot.price))
                 self.duration_var.set(str(timeslot.duration_months))
-                self.lockers_var.set(str(timeslot.lockers_available))
+                self.lockers_var.set(timeslot.lockers_available)
         
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load timeslot details: {str(e)}")
@@ -185,17 +186,8 @@ class TimeslotManagementFrame(ttk.Frame):
             price = Validators.validate_amount(self.price_var.get())
             duration = Validators.validate_duration_months(self.duration_var.get())
             
-            # Validate lockers available (must be non-negative integer)
-            lockers_str = self.lockers_var.get().strip()
-            if not lockers_str:
-                lockers = 0
-            else:
-                try:
-                    lockers = int(lockers_str)
-                    if lockers < 0:
-                        raise ValidationError("Number of lockers cannot be negative")
-                except ValueError:
-                    raise ValidationError("Number of lockers must be a valid integer")
+            # Get lockers availability (boolean value)
+            lockers_available = self.lockers_var.get()
             
             # Create or update timeslot
             if self.current_timeslot_id:
@@ -209,8 +201,7 @@ class TimeslotManagementFrame(ttk.Frame):
                 timeslot.end_time = end_time
                 timeslot.price = price
                 timeslot.duration_months = duration
-                timeslot.lockers_available = lockers
-                timeslot.lockers_available = lockers
+                timeslot.lockers_available = lockers_available
             else:
                 # Create new
                 timeslot = Timeslot(
@@ -219,7 +210,7 @@ class TimeslotManagementFrame(ttk.Frame):
                     end_time=end_time,
                     price=price,
                     duration_months=duration,
-                    lockers_available=lockers
+                    lockers_available=lockers_available
                 )
             
             # Validate timeslot
@@ -247,7 +238,7 @@ class TimeslotManagementFrame(ttk.Frame):
         self.end_time_var.set("")
         self.price_var.set("")
         self.duration_var.set("1")
-        self.lockers_var.set("0")
+        self.lockers_var.set(False)
     
     def delete_timeslot(self):
         """Delete selected timeslot"""

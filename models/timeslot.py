@@ -10,14 +10,14 @@ class Timeslot:
     """Timeslot model class"""
     
     def __init__(self, name=None, start_time=None, end_time=None, price=None,
-                 duration_months=1, lockers_available=0, timeslot_id=None):
+                 duration_months=1, lockers_available=False, timeslot_id=None):
         self.id = timeslot_id
         self.name = name
         self.start_time = start_time
         self.end_time = end_time
         self.price = price
         self.duration_months = duration_months
-        self.lockers_available = lockers_available
+        self.lockers_available = bool(lockers_available)
         self.is_active = True
         self.db_manager = DatabaseManager()
     
@@ -102,7 +102,7 @@ class Timeslot:
         timeslot.end_time = row['end_time']
         timeslot.price = row['price']
         timeslot.duration_months = row['duration_months']
-        timeslot.lockers_available = row['lockers_available']
+        timeslot.lockers_available = bool(row['lockers_available'])
         timeslot.is_active = bool(row['is_active'])
         return timeslot
     

@@ -71,7 +71,7 @@ class DatabaseManager:
                     end_time TIME NOT NULL,
                     price DECIMAL(10,2) NOT NULL,
                     duration_months INTEGER NOT NULL DEFAULT 1,
-                    lockers_available INTEGER DEFAULT 0,
+                    lockers_available BOOLEAN DEFAULT 0,
                     is_active BOOLEAN DEFAULT 1,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
