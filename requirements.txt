@@ -1,0 +1,22 @@
+# Core dependencies for basic functionality
+# Note: tkinter and sqlite3 are included with most Python installations
+
+# For Excel export functionality  
+pandas>=1.3.0
+openpyxl>=3.0.0
+
+# For PDF generation
+fpdf2>=2.5.0
+
+# For image handling (optional for student photos)
+Pillow>=8.0.0
+
+# For WhatsApp automation (optional)
+selenium>=4.0.0
+webdriver-manager>=3.8.0
+
+# For analytics charts (optional)
+matplotlib>=3.3.0
+
+# For date handling
+python-dateutil>=2.8.0
