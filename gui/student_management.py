@@ -17,6 +17,11 @@ class StudentManagementFrame(ttk.Frame):
     
     def __init__(self, parent):
         super().__init__(parent)
+        # Initialize data containers
+        self.timeslots = {}
+        self.available_seats = {}
+        self.current_student_id = None
+        
         self.setup_ui()
         self.load_data()
     
@@ -223,6 +228,7 @@ class StudentManagementFrame(ttk.Frame):
         
         try:
             students = Student.get_all()
+            print(f"DEBUG: Found {len(students)} students")  # Debug line
             for student in students:
                 # Get active subscriptions count
                 active_subs = len(student.get_active_subscriptions())
@@ -234,41 +240,67 @@ class StudentManagementFrame(ttk.Frame):
                     student.mobile_number,
                     active_subs
                 ))
+            print(f"DEBUG: Inserted {len(students)} students into tree")  # Debug line
         except Exception as e:
+            print(f"DEBUG ERROR in load_students: {e}")  # Debug line
             messagebox.showerror("Error", f"Failed to load students: {str(e)}")
     
     def load_timeslots(self):
         """Load timeslots into combo box"""
         try:
             timeslots = Timeslot.get_all()
+            print(f"DEBUG: Found {len(timeslots)} timeslots")  # Debug line
             timeslot_values = [f"{ts.name} ({ts.start_time}-{ts.end_time}) - ₹{ts.price}" for ts in timeslots]
             self.timeslot_combo['values'] = timeslot_values
             
             # Store timeslot objects for reference
             self.timeslots = {f"{ts.name} ({ts.start_time}-{ts.end_time}) - ₹{ts.price}": ts for ts in timeslots}
+            print(f"DEBUG: Loaded {len(timeslot_values)} timeslot values into combo")  # Debug line
         except Exception as e:
+            print(f"DEBUG ERROR in load_timeslots: {e}")  # Debug line
             messagebox.showerror("Error", f"Failed to load timeslots: {str(e)}")
     
     def on_timeslot_selected(self, event):
         """Handle timeslot selection"""
         if not self.timeslot_var.get() or not self.gender_var.get():
+            print("DEBUG: Missing timeslot or gender selection")  # Debug
             return
         
         try:
             # Get selected timeslot
             selected_timeslot = self.timeslots[self.timeslot_var.get()]
+            print(f"DEBUG: Selected timeslot: {selected_timeslot.name}")  # Debug
             
             # Get available seats for the gender and timeslot
-            available_seats = selected_timeslot.get_available_seats(self.gender_var.get())
+            available_seats_data = selected_timeslot.get_available_seats(self.gender_var.get())
+            print(f"DEBUG: Found {len(available_seats_data)} available seats")  # Debug
             
-            # Update seat combo box
-            seat_values = [f"Seat {seat['id']} (Row {seat['row_number']})" for seat in available_seats]
+            # Create seat objects from data and update combo box
+            self.available_seats = {}
+            seat_values = []
+            
+            for seat_data in available_seats_data:
+                seat_id = seat_data['id']
+                row_number = seat_data['row_number']
+                seat_label = f"Seat {seat_id} (Row {row_number})"
+                seat_values.append(seat_label)
+                
+                # Create a simple seat object for reference
+                from collections import namedtuple
+                Seat = namedtuple('Seat', ['id', 'row_number'])
+                self.available_seats[seat_label] = Seat(seat_id, row_number)
+            
             self.seat_combo['values'] = seat_values
+            print(f"DEBUG: Updated seat combo with {len(seat_values)} values")  # Debug
             
             # Set amount from timeslot price
             self.amount_var.set(str(selected_timeslot.price))
             
+            # Clear current seat selection
+            self.seat_var.set("")
+            
         except Exception as e:
+            print(f"DEBUG ERROR in on_timeslot_selected: {e}")  # Debug
             messagebox.showerror("Error", f"Failed to load available seats: {str(e)}")
     
     def on_student_select(self, event):
@@ -332,9 +364,9 @@ class StudentManagementFrame(ttk.Frame):
             messagebox.showerror("Error", f"Failed to load subscriptions: {str(e)}")
     
     def save_student(self):
-        """Save student"""
+        """Save student with mandatory subscription for new students"""
         try:
-            # Validate data
+            # Validate basic student data
             student_data = {
                 'name': self.name_var.get(),
                 'father_name': self.father_name_var.get(),
@@ -347,17 +379,109 @@ class StudentManagementFrame(ttk.Frame):
             
             validated_data = Validators.validate_student_data(student_data)
             
-            # Create or update student
-            student = Student(**validated_data)
-            student.save()
+            # Check if this is a new student or update
+            if hasattr(self, 'current_student_id') and self.current_student_id:
+                # Update existing student
+                student = Student.get_by_id(self.current_student_id)
+                if student:
+                    for key, value in validated_data.items():
+                        setattr(student, key, value)
+                    student.save()
+                    
+                    messagebox.showinfo("Success", "Student updated successfully!")
+                    self.load_students()
+                    self.clear_form()
+                    return
             
-            messagebox.showinfo("Success", "Student saved successfully!")
+            # For NEW students, we must create a subscription
+            # First validate that subscription details are provided
+            if not self.timeslot_var.get():
+                messagebox.showerror("Error", 
+                    "For new students, you MUST select a timeslot.\n"
+                    "Please select a timeslot to create their subscription.")
+                return
+            
+            if not self.seat_var.get():
+                messagebox.showerror("Error", 
+                    "For new students, you MUST select a seat.\n"
+                    "Please select a seat for their subscription.")
+                return
+            
+            if not self.amount_var.get():
+                messagebox.showerror("Error", 
+                    "For new students, you MUST enter subscription amount.\n"
+                    "Please enter the amount for their subscription.")
+                return
+            
+            # Create the student first
+            student = Student(**validated_data)
+            student_id = student.save()
+            
+            # Now create the mandatory subscription
+            self.create_mandatory_subscription(student_id, validated_data['name'])
+            
+            messagebox.showinfo("Success", 
+                f"Student '{validated_data['name']}' and subscription created successfully!")
             self.load_students()
+            self.clear_form()
             
         except ValidationError as e:
             messagebox.showerror("Validation Error", str(e))
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save student: {str(e)}")
+    
+    def create_mandatory_subscription(self, student_id, student_name):
+        """Create mandatory subscription for new student"""
+        try:
+            # Get selected timeslot
+            timeslot_key = self.timeslot_var.get()
+            if timeslot_key not in self.timeslots:
+                raise Exception("Invalid timeslot selected")
+            
+            selected_timeslot = self.timeslots[timeslot_key]
+            
+            # Get selected seat
+            seat_key = self.seat_var.get()
+            if seat_key not in self.available_seats:
+                raise Exception("Invalid seat selected")
+            
+            selected_seat = self.available_seats[seat_key]
+            
+            # Get subscription details
+            duration = int(self.duration_var.get())
+            amount = float(self.amount_var.get())
+            
+            # Calculate dates
+            from datetime import date, timedelta
+            start_date = date.today()
+            end_date = start_date + timedelta(days=30 * duration)
+            
+            # Create subscription
+            subscription = Subscription(
+                student_id=student_id,
+                seat_id=selected_seat.id,
+                timeslot_id=selected_timeslot.id,
+                start_date=start_date,
+                end_date=end_date,
+                amount_paid=amount
+            )
+            
+            # Validate and save subscription
+            errors = subscription.validate()
+            if errors:
+                raise Exception(f"Subscription validation failed: {', '.join(errors)}")
+            
+            subscription.save()
+            
+        except Exception as e:
+            # If subscription creation fails, we should delete the student
+            try:
+                student = Student.get_by_id(student_id)
+                if student:
+                    student.delete()
+            except:
+                pass
+            raise Exception(f"Failed to create subscription: {e}")
     
     def clear_form(self):
         """Clear the form"""
