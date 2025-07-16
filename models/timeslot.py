@@ -141,11 +141,13 @@ class Timeslot:
             WHERE s.is_active = 1 
             AND (s.gender_restriction = ? OR s.gender_restriction = 'Any')
             AND s.id NOT IN (
-                SELECT DISTINCT seat_id 
-                FROM student_subscriptions 
-                WHERE timeslot_id = ? 
-                AND is_active = 1
-                AND end_date >= date('now')
+                SELECT DISTINCT ss.seat_id 
+                FROM student_subscriptions ss
+                JOIN students st ON ss.student_id = st.id
+                WHERE ss.timeslot_id = ? 
+                AND ss.is_active = 1
+                AND st.is_active = 1
+                AND ss.end_date >= date('now')
             )
             ORDER BY s.id
         '''
