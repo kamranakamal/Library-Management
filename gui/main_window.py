@@ -197,7 +197,6 @@ class MainWindow:
             WhatsAppWindow(self.root)
         except Exception as e:
             messagebox.showerror("Error", f"Failed to open WhatsApp automation: {str(e)}")
-            print(f"WhatsApp automation error: {e}")  # For debugging
     
     def refresh_all_frames(self):
         """Refresh all frames after database changes"""

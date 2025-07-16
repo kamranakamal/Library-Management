@@ -2,7 +2,7 @@
 """
 Library Management System
 Main application entry point
-Version: 1.0.6
+Version: 1.0.7
 """
 
 import sys
