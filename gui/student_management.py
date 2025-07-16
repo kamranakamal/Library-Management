@@ -25,6 +25,10 @@ class StudentManagementFrame(ttk.Frame):
         self.setup_ui()
         self.load_data()
     
+    def set_today_date(self):
+        """Set registration date to today"""
+        self.reg_date_var.set(str(date.today()))
+    
     def setup_ui(self):
         """Setup user interface"""
         # Create main paned window
@@ -89,6 +93,27 @@ class StudentManagementFrame(ttk.Frame):
         ttk.Entry(form_frame, textvariable=self.locker_var, width=30).grid(row=row, column=1, pady=2, sticky='ew')
         row += 1
         
+        # Registration Date
+        ttk.Label(form_frame, text="Registration Date *:").grid(row=row, column=0, sticky='w', pady=2)
+        reg_date_frame = ttk.Frame(form_frame)
+        reg_date_frame.grid(row=row, column=1, pady=2, sticky='ew')
+        
+        self.reg_date_var = tk.StringVar()
+        # Set default to today's date
+        self.reg_date_var.set(str(date.today()))
+        reg_date_entry = ttk.Entry(reg_date_frame, textvariable=self.reg_date_var, width=25)
+        reg_date_entry.grid(row=0, column=0, sticky='ew')
+        
+        ttk.Button(reg_date_frame, text="Today", 
+                  command=self.set_today_date, width=8).grid(row=0, column=1, padx=(5,0))
+        
+        reg_date_frame.columnconfigure(0, weight=1)
+        
+        # Format hint
+        ttk.Label(form_frame, text="(YYYY-MM-DD format)", 
+                 font=('Arial', 8), foreground='gray').grid(row=row+1, column=1, sticky='w')
+        row += 2
+        
         # Buttons
         button_frame = ttk.Frame(form_frame)
         button_frame.grid(row=row, column=0, columnspan=2, pady=10, sticky='ew')
@@ -145,7 +170,8 @@ class StudentManagementFrame(ttk.Frame):
         sub_button_frame.grid(row=start_row, column=0, columnspan=2, pady=10, sticky='ew')
         
         ttk.Button(sub_button_frame, text="Add Subscription", command=self.add_subscription).grid(row=0, column=0, padx=5)
-        ttk.Button(sub_button_frame, text="Generate Receipt", command=self.generate_receipt).grid(row=0, column=1, padx=5)
+        ttk.Button(sub_button_frame, text="Renew Subscription", command=self.renew_subscription).grid(row=0, column=1, padx=5)
+        ttk.Button(sub_button_frame, text="Generate Receipt", command=self.generate_receipt).grid(row=0, column=2, padx=5)
     
     def create_student_list(self):
         """Create student list panel"""
@@ -168,7 +194,7 @@ class StudentManagementFrame(ttk.Frame):
         search_frame.columnconfigure(1, weight=1)
         
         # Student list
-        columns = ('ID', 'Name', 'Gender', 'Mobile', 'Active Subscriptions')
+        columns = ('ID', 'Name', 'Gender', 'Mobile', 'Registration Date', 'Active Subscriptions')
         self.student_tree = ttk.Treeview(list_frame, columns=columns, show='headings', height=15)
         
         for col in columns:
@@ -238,6 +264,7 @@ class StudentManagementFrame(ttk.Frame):
                     student.name,
                     student.gender,
                     student.mobile_number,
+                    student.registration_date,
                     active_subs
                 ))
             print(f"DEBUG: Inserted {len(students)} students into tree")  # Debug line
@@ -324,6 +351,7 @@ class StudentManagementFrame(ttk.Frame):
                 self.aadhaar_var.set(student.aadhaar_number or "")
                 self.email_var.set(student.email or "")
                 self.locker_var.set(student.locker_number or "")
+                self.registration_date_var.set(student.registration_date)
                 
                 # Load subscriptions
                 self.load_student_subscriptions(student_id)
@@ -374,7 +402,8 @@ class StudentManagementFrame(ttk.Frame):
                 'mobile_number': self.mobile_var.get(),
                 'aadhaar_number': self.aadhaar_var.get(),
                 'email': self.email_var.get(),
-                'locker_number': self.locker_var.get()
+                'locker_number': self.locker_var.get(),
+                'registration_date': self.registration_date_var.get()
             }
             
             validated_data = Validators.validate_student_data(student_data)
@@ -492,6 +521,7 @@ class StudentManagementFrame(ttk.Frame):
         self.aadhaar_var.set("")
         self.email_var.set("")
         self.locker_var.set("")
+        self.registration_date_var.set("")
         self.timeslot_var.set("")
         self.seat_var.set("")
         self.duration_var.set("1")
@@ -540,7 +570,8 @@ class StudentManagementFrame(ttk.Frame):
                 'mobile_number': self.mobile_var.get(),
                 'aadhaar_number': self.aadhaar_var.get(),
                 'email': self.email_var.get(),
-                'locker_number': self.locker_var.get()
+                'locker_number': self.locker_var.get(),
+                'registration_date': self.registration_date_var.get()
             }
             
             validated_data = Validators.validate_student_data(student_data)
@@ -606,6 +637,65 @@ class StudentManagementFrame(ttk.Frame):
         except Exception as e:
             messagebox.showerror("Error", f"Failed to generate receipt: {str(e)}")
     
+    def renew_subscription(self):
+        """Renew subscription for selected student"""
+        try:
+            # Check if a student is selected
+            selection = self.student_tree.selection()
+            if not selection:
+                messagebox.showwarning("Warning", "Please select a student to renew subscription")
+                return
+            
+            # Get selected student
+            item = self.student_tree.item(selection[0])
+            student_id = item['values'][0]
+            
+            student = Student.get_by_id(student_id)
+            if not student:
+                messagebox.showerror("Error", "Student not found")
+                return
+            
+            # Check for active subscriptions
+            active_subscriptions = student.get_active_subscriptions()
+            if not active_subscriptions:
+                messagebox.showwarning("Warning", 
+                    "This student has no active subscriptions to renew.\n"
+                    "Please use 'Add Subscription' to create a new subscription.")
+                return
+            
+            # Get the most recent active subscription
+            latest_subscription = max(active_subscriptions, key=lambda s: s.end_date)
+            
+            # Populate form with existing subscription details
+            timeslot = latest_subscription.get_timeslot()
+            seat = latest_subscription.get_seat()
+            
+            # Find and set the timeslot
+            for display_name, ts in self.timeslots.items():
+                if ts.id == timeslot.id:
+                    self.timeslot_var.set(display_name)
+                    break
+            
+            # Trigger timeslot selection to load seats
+            self.on_timeslot_selected(None)
+            
+            # Set the seat
+            seat_display = f"Seat {seat.seat_number}"
+            self.seat_var.set(seat_display)
+            
+            # Set default duration and amount (user can modify)
+            self.duration_var.set("1")
+            self.amount_var.set(str(latest_subscription.amount_paid))
+            
+            messagebox.showinfo("Ready to Renew", 
+                f"Subscription details loaded for {student.name}.\n"
+                f"Current subscription: {timeslot.start_time}-{timeslot.end_time}, {seat_display}\n"
+                f"Modify duration/amount if needed, then click 'Add Subscription' to renew.")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to prepare subscription renewal: {str(e)}")
+    
+    
     def search_students(self):
         """Search students"""
         search_term = self.search_var.get().strip()
@@ -627,6 +717,7 @@ class StudentManagementFrame(ttk.Frame):
                     student.name,
                     student.gender,
                     student.mobile_number,
+                    student.registration_date,
                     active_subs
                 ))
         

@@ -297,5 +297,6 @@ class Validators:
         validated_data['aadhaar_number'] = Validators.validate_aadhaar_number(student_data.get('aadhaar_number'))
         validated_data['email'] = Validators.validate_email(student_data.get('email'))
         validated_data['locker_number'] = Validators.validate_locker_number(student_data.get('locker_number'))
+        validated_data['registration_date'] = Validators.validate_date(student_data.get('registration_date'), "Registration date")
         
         return validated_data
