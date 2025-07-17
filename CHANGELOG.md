@@ -1,5 +1,31 @@
 # Library Management System - Changelog
 
+## Version 1.0.8 (2025-07-17) - Registration Date & Bug Fixes
+
+### New Features
+- **Registration Date Field**: Added registration date input in student form with "Today" button
+- **Subscription Renewal**: Implemented "Renew Subscription" functionality for existing students
+- **Enhanced Student Display**: Added registration date column in student list view
+
+### Bug Fixes
+- **Variable Naming**: Fixed `registration_date_var` vs `reg_date_var` inconsistency causing AttributeError
+- **Analytics Fix**: Fixed occupied seats count showing incorrect data after student deletion
+- **Seat Availability**: Updated queries to check both subscription and student active status
+- **Data Integrity**: All database queries now properly join students table to verify active status
+
+### Current Issue Under Investigation
+- **FIXED**: Timeslot Dropdown - New study timeslots not appearing in add subscription dropdown after creation
+  - **Root Cause**: Student management interface was not refreshing timeslot data after new timeslots were created
+  - **Solution**: Implemented callback mechanism between timeslot management and student management
+  - **Implementation**: Added `set_refresh_callback()` method to TimeslotManagementFrame
+  - **Auto-Refresh**: Student management now automatically refreshes when timeslots are created/deleted
+  - **Manual Refresh**: Existing "Refresh" button can still be used for manual updates
+
+### Technical Improvements
+- **Cross-Module Communication**: Added callback system for real-time interface updates
+- **Code Cleanup**: Removed debug statements from production code
+- **User Experience**: Seamless timeslot updates without manual refresh requirement
+
 ## Version 1.0.7 (2025-07-16) - Production Release
 
 ### Production Ready Release

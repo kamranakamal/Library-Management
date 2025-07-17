@@ -82,6 +82,10 @@ class MainWindow:
         self.timeslot_frame = TimeslotManagementFrame(self.notebook)
         self.notebook.add(self.timeslot_frame, text="Timeslot Management")
         
+        # Set up cross-frame communication
+        # When timeslots are updated, refresh student management
+        self.timeslot_frame.set_refresh_callback(self.student_frame.refresh)
+        
         # Book Management tab
         self.book_frame = BookManagementFrame(self.notebook)
         self.notebook.add(self.book_frame, text="Book Management")

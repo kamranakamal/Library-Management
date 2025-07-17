@@ -13,8 +13,13 @@ class TimeslotManagementFrame(ttk.Frame):
     
     def __init__(self, parent):
         super().__init__(parent)
+        self.refresh_callback = None  # Callback for when timeslots are updated
         self.setup_ui()
         self.load_data()
+    
+    def set_refresh_callback(self, callback):
+        """Set callback function to refresh other interfaces when timeslots change"""
+        self.refresh_callback = callback
     
     def setup_ui(self):
         """Setup user interface"""
@@ -225,6 +230,10 @@ class TimeslotManagementFrame(ttk.Frame):
             self.load_data()
             self.clear_form()
             
+            # Refresh other interfaces that depend on timeslots
+            if self.refresh_callback:
+                self.refresh_callback()
+            
         except ValidationError as e:
             messagebox.showerror("Validation Error", str(e))
         except Exception as e:
@@ -255,6 +264,10 @@ class TimeslotManagementFrame(ttk.Frame):
                     messagebox.showinfo("Success", "Timeslot deleted successfully!")
                     self.load_data()
                     self.clear_form()
+                    
+                    # Refresh other interfaces that depend on timeslots
+                    if self.refresh_callback:
+                        self.refresh_callback()
         
         except Exception as e:
             messagebox.showerror("Error", f"Failed to delete timeslot: {str(e)}")

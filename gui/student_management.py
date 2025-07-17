@@ -254,7 +254,6 @@ class StudentManagementFrame(ttk.Frame):
         
         try:
             students = Student.get_all()
-            print(f"DEBUG: Found {len(students)} students")  # Debug line
             for student in students:
                 # Get active subscriptions count
                 active_subs = len(student.get_active_subscriptions())
@@ -267,40 +266,32 @@ class StudentManagementFrame(ttk.Frame):
                     student.registration_date,
                     active_subs
                 ))
-            print(f"DEBUG: Inserted {len(students)} students into tree")  # Debug line
         except Exception as e:
-            print(f"DEBUG ERROR in load_students: {e}")  # Debug line
             messagebox.showerror("Error", f"Failed to load students: {str(e)}")
     
     def load_timeslots(self):
         """Load timeslots into combo box"""
         try:
             timeslots = Timeslot.get_all()
-            print(f"DEBUG: Found {len(timeslots)} timeslots")  # Debug line
             timeslot_values = [f"{ts.name} ({ts.start_time}-{ts.end_time}) - ₹{ts.price}" for ts in timeslots]
             self.timeslot_combo['values'] = timeslot_values
             
             # Store timeslot objects for reference
             self.timeslots = {f"{ts.name} ({ts.start_time}-{ts.end_time}) - ₹{ts.price}": ts for ts in timeslots}
-            print(f"DEBUG: Loaded {len(timeslot_values)} timeslot values into combo")  # Debug line
         except Exception as e:
-            print(f"DEBUG ERROR in load_timeslots: {e}")  # Debug line
             messagebox.showerror("Error", f"Failed to load timeslots: {str(e)}")
     
     def on_timeslot_selected(self, event):
         """Handle timeslot selection"""
         if not self.timeslot_var.get() or not self.gender_var.get():
-            print("DEBUG: Missing timeslot or gender selection")  # Debug
             return
         
         try:
             # Get selected timeslot
             selected_timeslot = self.timeslots[self.timeslot_var.get()]
-            print(f"DEBUG: Selected timeslot: {selected_timeslot.name}")  # Debug
             
             # Get available seats for the gender and timeslot
             available_seats_data = selected_timeslot.get_available_seats(self.gender_var.get())
-            print(f"DEBUG: Found {len(available_seats_data)} available seats")  # Debug
             
             # Create seat objects from data and update combo box
             self.available_seats = {}
@@ -318,7 +309,6 @@ class StudentManagementFrame(ttk.Frame):
                 self.available_seats[seat_label] = Seat(seat_id, row_number)
             
             self.seat_combo['values'] = seat_values
-            print(f"DEBUG: Updated seat combo with {len(seat_values)} values")  # Debug
             
             # Set amount from timeslot price
             self.amount_var.set(str(selected_timeslot.price))
@@ -327,7 +317,6 @@ class StudentManagementFrame(ttk.Frame):
             self.seat_var.set("")
             
         except Exception as e:
-            print(f"DEBUG ERROR in on_timeslot_selected: {e}")  # Debug
             messagebox.showerror("Error", f"Failed to load available seats: {str(e)}")
     
     def on_student_select(self, event):
