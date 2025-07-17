@@ -146,7 +146,7 @@ class Subscription:
             JOIN students s ON ss.student_id = s.id
             JOIN seats seat ON ss.seat_id = seat.id
             JOIN timeslots t ON ss.timeslot_id = t.id
-            WHERE ss.is_active = 1 AND ss.end_date BETWEEN date('now') AND ?
+            WHERE ss.is_active = 1 AND s.is_active = 1 AND ss.end_date BETWEEN date('now') AND ?
             ORDER BY ss.end_date
         '''
         
@@ -183,27 +183,64 @@ class Subscription:
     
     def check_overlap_with_student_subscriptions(self):
         """Check if this subscription overlaps with student's other subscriptions"""
-        # Only check for conflicts on the same seat
-        # Students can have multiple subscriptions on different seats simultaneously
-        query = '''
-            SELECT ss.id, ss.start_date, ss.end_date, s.seat_number, t.name as timeslot_name
+        # Check for two types of conflicts:
+        # 1. Exact duplicate (same seat + same timeslot combination)
+        # 2. Same timeslot conflicts (student can't be in two different seats at same time)
+        
+        # Check for exact duplicate subscriptions (same seat + same timeslot)
+        duplicate_query = '''
+            SELECT ss.id, ss.start_date, ss.end_date, s.id as seat_number, t.name as timeslot_name
             FROM student_subscriptions ss
             JOIN seats s ON ss.seat_id = s.id
             JOIN timeslots t ON ss.timeslot_id = t.id
-            WHERE ss.student_id = ? AND ss.seat_id = ? AND ss.is_active = 1
+            WHERE ss.student_id = ? AND ss.seat_id = ? AND ss.timeslot_id = ? AND ss.is_active = 1
             AND NOT (ss.end_date < ? OR ss.start_date > ?)
             AND ss.id != ?
         '''
-        params = (
-            self.student_id, self.seat_id, self.start_date, 
+        duplicate_params = (
+            self.student_id, self.seat_id, self.timeslot_id, self.start_date, 
             self.end_date, self.id or 0
         )
         
-        result = self.db_manager.execute_query(query, params)
+        duplicate_result = self.db_manager.execute_query(duplicate_query, duplicate_params)
         
-        if result and len(result) > 0:
-            # Store conflict details for better error messages
-            self._conflict_details = result[0]
+        if duplicate_result and len(duplicate_result) > 0:
+            conflict = duplicate_result[0]
+            self._conflict_details = {
+                'type': 'duplicate_subscription',
+                'seat_number': conflict['seat_number'],
+                'timeslot_name': conflict['timeslot_name'],
+                'start_date': conflict['start_date'],
+                'end_date': conflict['end_date']
+            }
+            return True
+        
+        # Check for same timeslot conflicts (student can't be in two different seats at same time)
+        same_timeslot_query = '''
+            SELECT ss.id, ss.start_date, ss.end_date, s.id as seat_number, t.name as timeslot_name
+            FROM student_subscriptions ss
+            JOIN seats s ON ss.seat_id = s.id
+            JOIN timeslots t ON ss.timeslot_id = t.id
+            WHERE ss.student_id = ? AND ss.timeslot_id = ? AND ss.seat_id != ? AND ss.is_active = 1
+            AND NOT (ss.end_date < ? OR ss.start_date > ?)
+            AND ss.id != ?
+        '''
+        same_timeslot_params = (
+            self.student_id, self.timeslot_id, self.seat_id, self.start_date, 
+            self.end_date, self.id or 0
+        )
+        
+        same_timeslot_result = self.db_manager.execute_query(same_timeslot_query, same_timeslot_params)
+        
+        if same_timeslot_result and len(same_timeslot_result) > 0:
+            conflict = same_timeslot_result[0]
+            self._conflict_details = {
+                'type': 'same_timeslot',
+                'seat_number': conflict['seat_number'],
+                'timeslot_name': conflict['timeslot_name'],
+                'start_date': conflict['start_date'],
+                'end_date': conflict['end_date']
+            }
             return True
         
         return False
@@ -274,6 +311,35 @@ class Subscription:
             errors.append(self.get_conflict_details())
         
         return errors
+    
+    def get_conflict_details(self):
+        """Get detailed conflict information for better error messages"""
+        if not hasattr(self, '_conflict_details'):
+            return "This subscription conflicts with existing bookings"
+        
+        conflict = self._conflict_details
+        
+        if conflict['type'] == 'duplicate_subscription':
+            return (f"Duplicate subscription: You already have a subscription for Seat {conflict['seat_number']} "
+                   f"in {conflict['timeslot_name']} from {conflict['start_date']} to {conflict['end_date']}. "
+                   f"You cannot purchase the same subscription plan twice. Please choose a different timeslot or wait for the current subscription to expire.")
+        
+        elif conflict['type'] == 'same_timeslot':
+            return (f"Time conflict: You already have a subscription for {conflict['timeslot_name']} "
+                   f"(Seat {conflict['seat_number']}) from {conflict['start_date']} to {conflict['end_date']}. "
+                   f"A student cannot have multiple seats in the same timeslot during overlapping periods.")
+        
+        return "This subscription conflicts with existing bookings"
+    
+    def get_seat(self):
+        """Get the seat object for this subscription"""
+        from models.seat import Seat
+        return Seat.get_by_id(self.seat_id)
+    
+    def get_timeslot(self):
+        """Get the timeslot object for this subscription"""
+        from models.timeslot import Timeslot
+        return Timeslot.get_by_id(self.timeslot_id)
     
     def __str__(self):
         return f"Subscription {self.receipt_number} ({self.start_date} to {self.end_date})"

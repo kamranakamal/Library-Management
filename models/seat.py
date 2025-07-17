@@ -94,7 +94,7 @@ class Seat:
             FROM student_subscriptions ss
             JOIN students s ON ss.student_id = s.id
             JOIN timeslots t ON ss.timeslot_id = t.id
-            WHERE ss.seat_id = ? AND ss.is_active = 1 AND ss.end_date >= date('now')
+            WHERE ss.seat_id = ? AND ss.is_active = 1 AND s.is_active = 1 AND ss.end_date >= date('now')
             ORDER BY t.start_time, ss.start_date
         '''
         return self.db_manager.execute_query(query, (self.id,))

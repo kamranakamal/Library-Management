@@ -132,11 +132,12 @@ class DatabaseOperations:
         """Get statistics for a specific month"""
         # Revenue for the month
         query = '''
-            SELECT SUM(amount_paid) as monthly_revenue
-            FROM student_subscriptions 
-            WHERE strftime('%Y', start_date) = ? 
-            AND strftime('%m', start_date) = ?
-            AND is_active = 1
+            SELECT SUM(ss.amount_paid) as monthly_revenue
+            FROM student_subscriptions ss
+            JOIN students s ON ss.student_id = s.id
+            WHERE strftime('%Y', ss.start_date) = ? 
+            AND strftime('%m', ss.start_date) = ?
+            AND ss.is_active = 1 AND s.is_active = 1
         '''
         result = self.db_manager.execute_query(query, (str(year), f"{month:02d}"))
         monthly_revenue = result[0]['monthly_revenue'] if result and result[0]['monthly_revenue'] else 0
@@ -147,6 +148,7 @@ class DatabaseOperations:
             FROM students 
             WHERE strftime('%Y', registration_date) = ? 
             AND strftime('%m', registration_date) = ?
+            AND is_active = 1
         '''
         result = self.db_manager.execute_query(query, (str(year), f"{month:02d}"))
         new_registrations = result[0]['new_registrations'] if result else 0
@@ -154,9 +156,11 @@ class DatabaseOperations:
         # Book borrowings
         query = '''
             SELECT COUNT(*) as monthly_borrowings
-            FROM book_borrowings 
-            WHERE strftime('%Y', borrow_date) = ? 
-            AND strftime('%m', borrow_date) = ?
+            FROM book_borrowings bb
+            JOIN students s ON bb.student_id = s.id
+            WHERE strftime('%Y', bb.borrow_date) = ? 
+            AND strftime('%m', bb.borrow_date) = ?
+            AND s.is_active = 1
         '''
         result = self.db_manager.execute_query(query, (str(year), f"{month:02d}"))
         monthly_borrowings = result[0]['monthly_borrowings'] if result else 0
@@ -166,6 +170,46 @@ class DatabaseOperations:
             'new_registrations': new_registrations,
             'book_borrowings': monthly_borrowings
         }
+    
+    def get_revenue_by_timeslot(self, year=None, month=None):
+        """Get revenue breakdown by timeslot for a specific period"""
+        if year and month:
+            # Monthly revenue by timeslot
+            query = '''
+                SELECT t.name as timeslot_name, t.start_time, t.end_time,
+                       SUM(ss.amount_paid) as revenue, COUNT(ss.id) as subscription_count
+                FROM student_subscriptions ss
+                JOIN students s ON ss.student_id = s.id
+                JOIN timeslots t ON ss.timeslot_id = t.id
+                WHERE strftime('%Y', ss.start_date) = ? 
+                AND strftime('%m', ss.start_date) = ?
+                AND ss.is_active = 1 AND s.is_active = 1
+                GROUP BY t.id, t.name, t.start_time, t.end_time
+                ORDER BY t.start_time
+            '''
+            result = self.db_manager.execute_query(query, (str(year), f"{month:02d}"))
+        else:
+            # All-time revenue by timeslot
+            query = '''
+                SELECT t.name as timeslot_name, t.start_time, t.end_time,
+                       SUM(ss.amount_paid) as revenue, COUNT(ss.id) as subscription_count
+                FROM student_subscriptions ss
+                JOIN students s ON ss.student_id = s.id
+                JOIN timeslots t ON ss.timeslot_id = t.id
+                WHERE ss.is_active = 1 AND s.is_active = 1
+                GROUP BY t.id, t.name, t.start_time, t.end_time
+                ORDER BY t.start_time
+            '''
+            result = self.db_manager.execute_query(query)
+        
+        return result
+    
+    def get_current_month_revenue(self):
+        """Get total revenue for current month"""
+        from datetime import date
+        current_date = date.today()
+        stats = self.get_monthly_statistics(current_date.year, current_date.month)
+        return stats['revenue']
     
     def backup_database(self, backup_path):
         """Create database backup"""

@@ -70,6 +70,7 @@ class AnalyticsFrame(ttk.Frame):
         self.unassigned_students_var = tk.StringVar(value="0")
         self.total_books_var = tk.StringVar(value="0")
         self.active_borrowings_var = tk.StringVar(value="0")
+        self.monthly_revenue_var = tk.StringVar(value="₹0")
         
         # Create stat boxes
         row = 0
@@ -83,7 +84,8 @@ class AnalyticsFrame(ttk.Frame):
             ("Assigned Students", self.assigned_students_var, "#FECA57"),
             ("Unassigned Students", self.unassigned_students_var, "#FF9FF3"),
             ("Total Books", self.total_books_var, "#54A0FF"),
-            ("Active Borrowings", self.active_borrowings_var, "#5F27CD")
+            ("Active Borrowings", self.active_borrowings_var, "#5F27CD"),
+            ("Monthly Revenue", self.monthly_revenue_var, "#2ECC71")
         ]
         
         for stat_name, stat_var, color in stats:
@@ -101,12 +103,12 @@ class AnalyticsFrame(ttk.Frame):
             value_label.pack(pady=(0, 10))
             
             col += 1
-            if col >= 4:
+            if col >= 3:  # Changed from 4 to 3 for better layout with 9 items
                 col = 0
                 row += 1
         
         # Configure column weights
-        for i in range(4):
+        for i in range(3):  # Changed from 4 to 3
             stats_grid.columnconfigure(i, weight=1)
         
         # Refresh button
@@ -166,6 +168,19 @@ class AnalyticsFrame(ttk.Frame):
                                  values=["Occupancy Rate", "Revenue by Timeslot", "Student Gender Distribution", "Book Categories"],
                                  state='readonly')
         chart_combo.pack(side='left', padx=5)
+        
+        # Date selection for revenue chart
+        ttk.Label(chart_control_frame, text="Month/Year:").pack(side='left', padx=(20, 5))
+        self.chart_year_var = tk.StringVar(value=str(datetime.now().year))
+        year_combo = ttk.Combobox(chart_control_frame, textvariable=self.chart_year_var,
+                                values=[str(y) for y in range(2020, 2030)], width=8, state='readonly')
+        year_combo.pack(side='left', padx=2)
+        
+        self.chart_month_var = tk.StringVar(value=str(datetime.now().month))
+        month_combo = ttk.Combobox(chart_control_frame, textvariable=self.chart_month_var,
+                                 values=[str(m) for m in range(1, 13)], width=5, state='readonly')
+        month_combo.pack(side='left', padx=2)
+        
         ttk.Button(chart_control_frame, text="Generate Chart", command=self.generate_chart).pack(side='left', padx=5)
         
         # Chart display frame
@@ -259,6 +274,10 @@ class AnalyticsFrame(ttk.Frame):
             self.unassigned_students_var.set(str(analytics['unassigned_students']))
             self.total_books_var.set(str(analytics['total_books']))
             self.active_borrowings_var.set(str(analytics['active_borrowings']))
+            
+            # Get current month's revenue
+            monthly_revenue = self.db_ops.get_current_month_revenue()
+            self.monthly_revenue_var.set(f"₹{monthly_revenue:,.0f}")
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load statistics: {str(e)}")
@@ -362,11 +381,67 @@ class AnalyticsFrame(ttk.Frame):
     
     def create_revenue_chart(self, ax):
         """Create revenue by timeslot chart"""
-        # This would require database queries to get revenue data
-        # For now, create a placeholder
-        ax.text(0.5, 0.5, 'Revenue Chart\n(To be implemented)', 
-               ha='center', va='center', transform=ax.transAxes, fontsize=16)
-        ax.set_title('Revenue by Timeslot')
+        try:
+            # Get selected year and month from the controls
+            selected_year = int(self.chart_year_var.get()) if hasattr(self, 'chart_year_var') else datetime.now().year
+            selected_month = int(self.chart_month_var.get()) if hasattr(self, 'chart_month_var') else datetime.now().month
+            
+            # Get revenue data for selected month
+            revenue_data = self.db_ops.get_revenue_by_timeslot(selected_year, selected_month)
+            
+            if not revenue_data:
+                month_name = datetime(selected_year, selected_month, 1).strftime("%B %Y")
+                ax.text(0.5, 0.5, f'No revenue data available for {month_name}', 
+                       ha='center', va='center', transform=ax.transAxes, fontsize=12)
+                ax.set_title(f'Revenue by Timeslot - {month_name}')
+                return
+            
+            # Extract data for plotting
+            timeslot_names = []
+            revenues = []
+            colors = plt.cm.Set3(range(len(revenue_data)))  # Use colormap for variety
+            
+            for item in revenue_data:
+                # Create readable timeslot label
+                timeslot_label = f"{item['timeslot_name']}\n({item['start_time']}-{item['end_time']})"
+                timeslot_names.append(timeslot_label)
+                revenues.append(float(item['revenue']))
+            
+            # Create bar chart
+            bars = ax.bar(timeslot_names, revenues, color=colors)
+            
+            # Customize chart
+            month_name = datetime(selected_year, selected_month, 1).strftime("%B %Y")
+            ax.set_title(f'Revenue by Timeslot - {month_name}', fontsize=14, fontweight='bold')
+            ax.set_xlabel('Timeslots', fontsize=12)
+            ax.set_ylabel('Revenue (₹)', fontsize=12)
+            
+            # Format y-axis to show rupee values
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'₹{x:,.0f}'))
+            
+            # Add value labels on bars
+            for bar, revenue in zip(bars, revenues):
+                height = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2., height + max(revenues)*0.01,
+                       f'₹{revenue:,.0f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+            
+            # Rotate x-axis labels for better readability
+            plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+            
+            # Add total revenue annotation
+            total_revenue = sum(revenues)
+            ax.text(0.02, 0.98, f'Total: ₹{total_revenue:,.0f}', 
+                   transform=ax.transAxes, fontsize=12, fontweight='bold',
+                   bbox=dict(boxstyle='round', facecolor='yellow', alpha=0.7),
+                   verticalalignment='top')
+            
+            # Adjust layout to prevent label cutoff
+            plt.tight_layout()
+            
+        except Exception as e:
+            ax.text(0.5, 0.5, f'Error loading revenue data:\n{str(e)}', 
+                   ha='center', va='center', transform=ax.transAxes, fontsize=12)
+            ax.set_title('Revenue by Timeslot - Error')
     
     def create_gender_chart(self, ax):
         """Create gender distribution pie chart"""

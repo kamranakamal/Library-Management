@@ -145,7 +145,7 @@ class ExcelExporter:
             JOIN students s ON ss.student_id = s.id
             JOIN seats seat ON ss.seat_id = seat.id
             JOIN timeslots t ON ss.timeslot_id = t.id
-            WHERE ss.is_active = 1
+            WHERE ss.is_active = 1 AND s.is_active = 1
             ORDER BY ss.start_date DESC
         '''
         return [dict(row) for row in self.db_ops.db_manager.execute_query(query)]
@@ -238,7 +238,7 @@ class ExcelExporter:
             JOIN timeslots t ON ss.timeslot_id = t.id
             WHERE strftime('%Y', ss.start_date) = ? 
             AND strftime('%m', ss.start_date) = ?
-            AND ss.is_active = 1
+            AND ss.is_active = 1 AND s.is_active = 1
             ORDER BY ss.start_date
         '''
         return [dict(row) for row in self.db_ops.db_manager.execute_query(

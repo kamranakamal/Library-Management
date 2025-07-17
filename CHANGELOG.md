@@ -1,5 +1,60 @@
 # Library Management System - Changelog
 
+## Version 1.0.11 (2025-07-17) - Revenue Analytics Enhancement
+
+### New Features
+- **Revenue Analytics Dashboard**: Comprehensive revenue tracking and visualization
+  - **Monthly Revenue Display**: Added current month's total revenue to overview statistics
+  - **Revenue by Timeslot Chart**: Interactive bar chart showing revenue breakdown by timeslot
+  - **Month/Year Selection**: Date controls to view revenue data for specific months
+  - **Visual Revenue Insights**: Color-coded charts with detailed labels and totals
+
+### Analytics Enhancements
+- **Enhanced Statistics Grid**: Added monthly revenue as 9th statistic with proper 3-column layout
+- **Interactive Charts**: Month/year selection controls for revenue analysis
+- **Revenue Calculations**: Proper filtering of active students and subscriptions in revenue queries
+- **Professional Chart Design**: 
+  - Formatted currency display (₹ symbol with comma separators)
+  - Value labels on chart bars
+  - Total revenue summary box
+  - Responsive color schemes using matplotlib colormap
+
+### Technical Improvements
+- **Database Queries**: New `get_revenue_by_timeslot()` and `get_current_month_revenue()` methods
+- **Data Integrity**: All revenue queries properly filter inactive students and subscriptions
+- **UI/UX**: Enhanced charts tab with intuitive date selection controls
+- **Error Handling**: Graceful handling of empty revenue data with informative messages
+
+### Files Modified
+- `utils/database_manager.py`: Added revenue calculation methods with proper filtering
+- `gui/analytics.py`: Complete revenue analytics implementation with interactive charts
+- Enhanced user interface with month/year selection and professional chart styling
+
+## Version 1.0.10 (2025-07-17) - Subscription Logic & Data Integrity Fixes
+
+### Critical Bug Fixes
+- **Subscription Overlap Logic**: Fixed subscription validation to allow multiple subscriptions on same seat for different timeslots
+  - **Previous Issue**: Students were blocked from having any overlapping subscriptions on the same seat
+  - **Fix**: Now only prevents duplicate subscriptions (same seat + same timeslot combination)
+  - **Allows**: Multiple timeslots on same seat, different seats for different timeslots
+  - **Prevents**: Exact duplicate subscriptions, multiple seats in same timeslot during overlapping periods
+
+- **Deleted Student Data Leakage**: Fixed deleted students appearing in various views and reports
+  - **Analytics Expiration View**: Now properly filters out inactive students from expiring subscriptions
+  - **Excel Exports**: All export queries now exclude deleted students from subscription data
+  - **Financial Reports**: Monthly revenue reports exclude subscriptions from deleted students
+  - **Seat Occupancy**: Seat schedule queries now filter out deleted students
+
+### Technical Improvements
+- **Database Query Consistency**: Added `s.is_active = 1` filter to all student-subscription join queries
+- **Enhanced Error Messages**: More specific error messages for different types of subscription conflicts
+- **Helper Methods**: Added `get_seat()` and `get_timeslot()` methods to Subscription model
+
+### Files Modified
+- `models/subscription.py`: Subscription overlap validation logic and helper methods
+- `utils/excel_exporter.py`: Export queries with proper student active status filtering
+- `models/seat.py`: Seat occupancy queries with deleted student filtering
+
 ## Version 1.0.9 (2025-07-17) - Multiple Subscriptions Enhancement
 
 ### New Features
@@ -9,14 +64,16 @@
 - **Receipt Generation**: Full support for receipts across all subscriptions
 
 ### Current Development
-- **IMPLEMENTING**: Multiple subscription feature with overlap validation
-  - **FIXED**: Overlap validation now correctly allows multiple subscriptions on different seats
-  - **ENHANCED**: Added detailed conflict messages showing which subscription conflicts
-  - **IMPROVED**: Students can have multiple subscriptions as long as they don't overlap on the same seat
-  - Adding subscription overlap detection logic
-  - Updating UI to handle existing vs new student scenarios
-  - Ensuring receipt generation works for all subscriptions
-  - Maintaining data integrity across multiple subscriptions
+- **COMPLETED**: Multiple subscription feature with comprehensive overlap validation
+  - **Seat Conflict Prevention**: Students cannot have overlapping subscriptions on the same seat
+  - **Timeslot Conflict Prevention**: Students cannot have multiple seats in the same timeslot during overlapping periods
+  - **Smart Error Messages**: Detailed conflict information showing exactly which subscription conflicts and why
+  - **Valid Scenarios Supported**:
+    - Multiple seats in different timeslots (simultaneous)
+    - Sequential subscriptions on the same seat (non-overlapping)
+    - Different seats in different timeslots for different time periods
+  - **UI Enhancements**: Status indicators showing when editing existing vs creating new students
+  - **Receipt Generation**: Full support maintained across all subscription types
 
 ## Version 1.0.8 (2025-07-17) - Registration Date & Bug Fixes
 
