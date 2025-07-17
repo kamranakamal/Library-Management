@@ -5,9 +5,15 @@ Application settings and configuration
 import os
 
 # Application Information
-APP_NAME = "Library Management System"
+APP_NAME = "Sangharsh Library"
 APP_VERSION = "1.0.0"
 APP_AUTHOR = "Library Management Team"
+
+# Library Information
+LIBRARY_NAME = "Sangharsh Library"
+LIBRARY_PHONE = "+91 85219 10999"
+LIBRARY_EMAIL = "sangharshlibrary7@gmail.com"
+LIBRARY_ADDRESS = "Rajgir Road, Opp. of Kohinoor Furniture, Malahbigha, Islampur, Nalanda, Bihar 801303"
 
 # Database Configuration
 DATABASE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "library.db")

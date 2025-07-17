@@ -5,7 +5,8 @@ PDF receipt generation utilities
 import os
 from datetime import datetime
 from fpdf import FPDF
-from config.settings import RECEIPTS_DIR, DEFAULT_CURRENCY, APP_NAME
+from config.settings import (RECEIPTS_DIR, DEFAULT_CURRENCY, APP_NAME, 
+                           LIBRARY_NAME, LIBRARY_PHONE, LIBRARY_EMAIL, LIBRARY_ADDRESS)
 
 
 class ReceiptGenerator:
@@ -28,7 +29,15 @@ class ReceiptGenerator:
             pdf.set_font('Arial', 'B', 16)
             
             # Header
-            pdf.cell(0, 10, APP_NAME, 0, 1, 'C')
+            pdf.set_font('Arial', 'B', 18)
+            pdf.cell(0, 10, LIBRARY_NAME, 0, 1, 'C')
+            
+            pdf.set_font('Arial', '', 10)
+            pdf.cell(0, 6, LIBRARY_ADDRESS, 0, 1, 'C')
+            pdf.cell(0, 6, f"Phone: {LIBRARY_PHONE} | Email: {LIBRARY_EMAIL}", 0, 1, 'C')
+            
+            pdf.ln(5)
+            pdf.set_font('Arial', 'B', 14)
             pdf.cell(0, 10, 'Subscription Receipt', 0, 1, 'C')
             pdf.ln(10)
             
@@ -119,7 +128,15 @@ class ReceiptGenerator:
             pdf.set_font('Arial', 'B', 16)
             
             # Header
-            pdf.cell(0, 10, APP_NAME, 0, 1, 'C')
+            pdf.set_font('Arial', 'B', 18)
+            pdf.cell(0, 10, LIBRARY_NAME, 0, 1, 'C')
+            
+            pdf.set_font('Arial', '', 10)
+            pdf.cell(0, 6, LIBRARY_ADDRESS, 0, 1, 'C')
+            pdf.cell(0, 6, f"Phone: {LIBRARY_PHONE} | Email: {LIBRARY_EMAIL}", 0, 1, 'C')
+            
+            pdf.ln(5)
+            pdf.set_font('Arial', 'B', 14)
             pdf.cell(0, 10, 'Subscription Renewal Receipt', 0, 1, 'C')
             pdf.ln(10)
             
@@ -176,7 +193,15 @@ class ReceiptGenerator:
             pdf.set_font('Arial', 'B', 16)
             
             # Header
-            pdf.cell(0, 10, APP_NAME, 0, 1, 'C')
+            pdf.set_font('Arial', 'B', 18)
+            pdf.cell(0, 10, LIBRARY_NAME, 0, 1, 'C')
+            
+            pdf.set_font('Arial', '', 10)
+            pdf.cell(0, 6, LIBRARY_ADDRESS, 0, 1, 'C')
+            pdf.cell(0, 6, f"Phone: {LIBRARY_PHONE} | Email: {LIBRARY_EMAIL}", 0, 1, 'C')
+            
+            pdf.ln(5)
+            pdf.set_font('Arial', 'B', 14)
             pdf.cell(0, 10, f'Monthly Report - {month_data["month"]} {month_data["year"]}', 0, 1, 'C')
             pdf.ln(10)
             

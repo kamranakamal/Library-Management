@@ -13,7 +13,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
-from config.settings import WHATSAPP_WEB_URL, WHATSAPP_DELAY
+from config.settings import (WHATSAPP_WEB_URL, WHATSAPP_DELAY, LIBRARY_NAME, 
+                           LIBRARY_PHONE, LIBRARY_EMAIL, LIBRARY_ADDRESS)
 
 
 class WhatsAppAutomation:
@@ -188,17 +189,21 @@ class WhatsAppAutomation:
             message = f"""
 Hello {subscription['student_name']}!
 
-This is a reminder that your library subscription is expiring soon.
+This is a reminder from {LIBRARY_NAME} that your library subscription is expiring soon.
 
 Details:
 - Seat Number: {subscription['seat_number']}
 - Timeslot: {subscription['timeslot_name']}
 - Expiry Date: {subscription['end_date']}
 
-Please visit the library to renew your subscription.
+Please visit us to renew your subscription.
 
-Thank you!
-Library Management
+{LIBRARY_NAME}
+📍 {LIBRARY_ADDRESS}
+📞 {LIBRARY_PHONE}
+📧 {LIBRARY_EMAIL}
+
+Thank you for choosing {LIBRARY_NAME}!
             """.strip()
             
             messages.append({
@@ -217,7 +222,7 @@ Library Management
             message = f"""
 Hello {borrowing['student_name']}!
 
-This is a reminder that you have an overdue book.
+This is a reminder from {LIBRARY_NAME} that you have an overdue book.
 
 Book Details:
 - Title: {borrowing['book_title']}
@@ -227,8 +232,12 @@ Book Details:
 
 Please return the book as soon as possible to avoid additional charges.
 
-Thank you!
-Library Management
+{LIBRARY_NAME}
+📍 {LIBRARY_ADDRESS}
+📞 {LIBRARY_PHONE}
+📧 {LIBRARY_EMAIL}
+
+Thank you for choosing {LIBRARY_NAME}!
             """.strip()
             
             messages.append({
@@ -238,6 +247,35 @@ Library Management
             })
         
         return self.send_bulk_messages(messages)
+    
+    def send_subscription_confirmation(self, subscription_data):
+        """Send subscription confirmation message"""
+        message = f"""
+🎉 Welcome to {LIBRARY_NAME}! 🎉
+
+Dear {subscription_data['student_name']},
+
+Your subscription has been successfully confirmed!
+
+📋 Subscription Details:
+- Receipt No: {subscription_data['receipt_number']}
+- Seat Number: {subscription_data['seat_id']}
+- Timeslot: {subscription_data['timeslot_name']}
+- Duration: {subscription_data['start_date']} to {subscription_data['end_date']}
+- Amount Paid: ₹{subscription_data['amount_paid']}
+
+🏢 {LIBRARY_NAME}
+📍 {LIBRARY_ADDRESS}
+📞 {LIBRARY_PHONE}
+📧 {LIBRARY_EMAIL}
+
+Thank you for choosing {LIBRARY_NAME}! We wish you all the best in your studies.
+
+Best regards,
+{LIBRARY_NAME} Team
+        """.strip()
+        
+        return self.send_message(subscription_data['mobile_number'], message)
     
     def close_driver(self):
         """Close the WebDriver"""
