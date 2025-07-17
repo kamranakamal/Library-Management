@@ -122,6 +122,12 @@ class StudentManagementFrame(ttk.Frame):
         ttk.Button(button_frame, text="Clear Form", command=self.clear_form).grid(row=0, column=1, padx=5)
         ttk.Button(button_frame, text="Delete Student", command=self.delete_student).grid(row=0, column=2, padx=5)
         
+        # Status label
+        row += 1
+        self.status_label = ttk.Label(form_frame, text="Ready to create new student", 
+                                     font=('Arial', 9), foreground='blue')
+        self.status_label.grid(row=row, column=0, columnspan=2, pady=5)
+        
         # Configure column weights
         form_frame.columnconfigure(1, weight=1)
         
@@ -135,8 +141,10 @@ class StudentManagementFrame(ttk.Frame):
         start_row += 1
         
         # Subscription header
-        ttk.Label(parent, text="Add Subscription", font=('Arial', 10, 'bold')).grid(row=start_row, column=0, columnspan=2, pady=5)
-        start_row += 1
+        ttk.Label(parent, text="Add New Subscription", font=('Arial', 10, 'bold')).grid(row=start_row, column=0, columnspan=2, pady=5)
+        ttk.Label(parent, text="(Works for both new and existing students)", 
+                 font=('Arial', 8), foreground='gray').grid(row=start_row+1, column=0, columnspan=2)
+        start_row += 2
         
         # Timeslot
         ttk.Label(parent, text="Timeslot:").grid(row=start_row, column=0, sticky='w', pady=2)
@@ -342,6 +350,10 @@ class StudentManagementFrame(ttk.Frame):
                 self.locker_var.set(student.locker_number or "")
                 self.reg_date_var.set(student.registration_date)
                 
+                # Update status label
+                self.status_label.config(text=f"Editing: {student.name} (ID: {student.id})", 
+                                       foreground='green')
+                
                 # Load subscriptions
                 self.load_student_subscriptions(student_id)
                 
@@ -381,7 +393,7 @@ class StudentManagementFrame(ttk.Frame):
             messagebox.showerror("Error", f"Failed to load subscriptions: {str(e)}")
     
     def save_student(self):
-        """Save student with mandatory subscription for new students"""
+        """Save student information (create new or update existing)"""
         try:
             # Validate basic student data
             student_data = {
@@ -397,10 +409,14 @@ class StudentManagementFrame(ttk.Frame):
             
             validated_data = Validators.validate_student_data(student_data)
             
-            # Check if this is a new student or update
-            if hasattr(self, 'current_student_id') and self.current_student_id:
+            # Check if this is updating an existing student
+            selection = self.student_tree.selection()
+            if selection:
                 # Update existing student
-                student = Student.get_by_id(self.current_student_id)
+                item = self.student_tree.item(selection[0])
+                student_id = item['values'][0]
+                student = Student.get_by_id(student_id)
+                
                 if student:
                     for key, value in validated_data.items():
                         setattr(student, key, value)
@@ -408,98 +424,34 @@ class StudentManagementFrame(ttk.Frame):
                     
                     messagebox.showinfo("Success", "Student updated successfully!")
                     self.load_students()
-                    self.clear_form()
                     return
             
-            # For NEW students, we must create a subscription
-            # First validate that subscription details are provided
-            if not self.timeslot_var.get():
-                messagebox.showerror("Error", 
-                    "For new students, you MUST select a timeslot.\n"
-                    "Please select a timeslot to create their subscription.")
-                return
-            
-            if not self.seat_var.get():
-                messagebox.showerror("Error", 
-                    "For new students, you MUST select a seat.\n"
-                    "Please select a seat for their subscription.")
-                return
-            
-            if not self.amount_var.get():
-                messagebox.showerror("Error", 
-                    "For new students, you MUST enter subscription amount.\n"
-                    "Please enter the amount for their subscription.")
-                return
-            
-            # Create the student first
+            # Create new student
             student = Student(**validated_data)
             student_id = student.save()
             
-            # Now create the mandatory subscription
-            self.create_mandatory_subscription(student_id, validated_data['name'])
-            
             messagebox.showinfo("Success", 
-                f"Student '{validated_data['name']}' and subscription created successfully!")
+                f"Student '{validated_data['name']}' created successfully!\n"
+                f"You can now add subscriptions using the 'Add Subscription' button.")
             self.load_students()
-            self.clear_form()
+            
+            # Select the newly created student in the tree
+            self.select_student_by_id(student_id)
             
         except ValidationError as e:
             messagebox.showerror("Validation Error", str(e))
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save student: {str(e)}")
     
-    def create_mandatory_subscription(self, student_id, student_name):
-        """Create mandatory subscription for new student"""
-        try:
-            # Get selected timeslot
-            timeslot_key = self.timeslot_var.get()
-            if timeslot_key not in self.timeslots:
-                raise Exception("Invalid timeslot selected")
-            
-            selected_timeslot = self.timeslots[timeslot_key]
-            
-            # Get selected seat
-            seat_key = self.seat_var.get()
-            if seat_key not in self.available_seats:
-                raise Exception("Invalid seat selected")
-            
-            selected_seat = self.available_seats[seat_key]
-            
-            # Get subscription details
-            duration = int(self.duration_var.get())
-            amount = float(self.amount_var.get())
-            
-            # Calculate dates
-            from datetime import date, timedelta
-            start_date = date.today()
-            end_date = start_date + timedelta(days=30 * duration)
-            
-            # Create subscription
-            subscription = Subscription(
-                student_id=student_id,
-                seat_id=selected_seat.id,
-                timeslot_id=selected_timeslot.id,
-                start_date=start_date,
-                end_date=end_date,
-                amount_paid=amount
-            )
-            
-            # Validate and save subscription
-            errors = subscription.validate()
-            if errors:
-                raise Exception(f"Subscription validation failed: {', '.join(errors)}")
-            
-            subscription.save()
-            
-        except Exception as e:
-            # If subscription creation fails, we should delete the student
-            try:
-                student = Student.get_by_id(student_id)
-                if student:
-                    student.delete()
-            except:
-                pass
-            raise Exception(f"Failed to create subscription: {e}")
+    def select_student_by_id(self, student_id):
+        """Select a student in the tree by their ID"""
+        for item in self.student_tree.get_children():
+            item_values = self.student_tree.item(item)['values']
+            if item_values[0] == student_id:
+                self.student_tree.selection_set(item)
+                self.student_tree.focus(item)
+                self.on_student_select(None)  # Trigger selection event
+                break
     
     def clear_form(self):
         """Clear the form"""
@@ -515,6 +467,12 @@ class StudentManagementFrame(ttk.Frame):
         self.seat_var.set("")
         self.duration_var.set("1")
         self.amount_var.set("")
+        
+        # Reset status label
+        self.status_label.config(text="Ready to create new student", foreground='blue')
+        
+        # Clear student tree selection
+        self.student_tree.selection_remove(self.student_tree.selection())
         
         # Clear subscriptions tree
         for item in self.subscription_tree.get_children():
@@ -546,28 +504,7 @@ class StudentManagementFrame(ttk.Frame):
     def add_subscription(self):
         """Add subscription for student"""
         try:
-            # Validate student exists
-            if not self.name_var.get():
-                messagebox.showwarning("Warning", "Please create or select a student first")
-                return
-            
-            # Get or create student
-            student_data = {
-                'name': self.name_var.get(),
-                'father_name': self.father_name_var.get(),
-                'gender': self.gender_var.get(),
-                'mobile_number': self.mobile_var.get(),
-                'aadhaar_number': self.aadhaar_var.get(),
-                'email': self.email_var.get(),
-                'locker_number': self.locker_var.get(),
-                'registration_date': self.reg_date_var.get()
-            }
-            
-            validated_data = Validators.validate_student_data(student_data)
-            student = Student(**validated_data)
-            student_id = student.save()
-            
-            # Validate subscription data
+            # Validate subscription data first
             if not self.timeslot_var.get():
                 messagebox.showwarning("Warning", "Please select a timeslot")
                 return
@@ -575,6 +512,48 @@ class StudentManagementFrame(ttk.Frame):
             if not self.seat_var.get():
                 messagebox.showwarning("Warning", "Please select a seat")
                 return
+            
+            if not self.amount_var.get():
+                messagebox.showwarning("Warning", "Please enter the subscription amount")
+                return
+            
+            # Determine if we're working with an existing student or creating new
+            student_id = None
+            selection = self.student_tree.selection()
+            
+            if selection:
+                # Existing student selected
+                item = self.student_tree.item(selection[0])
+                student_id = item['values'][0]
+                student = Student.get_by_id(student_id)
+                
+                if not student:
+                    messagebox.showerror("Error", "Selected student not found")
+                    return
+            else:
+                # Check if student form has data for creating new student
+                if not self.name_var.get():
+                    messagebox.showwarning("Warning", 
+                        "Please either:\n"
+                        "1. Select an existing student from the list, OR\n"
+                        "2. Fill in the student information to create a new student")
+                    return
+                
+                # Create new student
+                student_data = {
+                    'name': self.name_var.get(),
+                    'father_name': self.father_name_var.get(),
+                    'gender': self.gender_var.get(),
+                    'mobile_number': self.mobile_var.get(),
+                    'aadhaar_number': self.aadhaar_var.get(),
+                    'email': self.email_var.get(),
+                    'locker_number': self.locker_var.get(),
+                    'registration_date': self.reg_date_var.get()
+                }
+                
+                validated_data = Validators.validate_student_data(student_data)
+                student = Student(**validated_data)
+                student_id = student.save()
             
             # Get selected timeslot and seat
             selected_timeslot = self.timeslots[self.timeslot_var.get()]
@@ -597,7 +576,7 @@ class StudentManagementFrame(ttk.Frame):
                 amount_paid=float(self.amount_var.get())
             )
             
-            # Validate subscription
+            # Validate subscription (includes overlap checking)
             errors = subscription.validate()
             if errors:
                 messagebox.showerror("Validation Error", "\n".join(errors))
@@ -605,12 +584,29 @@ class StudentManagementFrame(ttk.Frame):
             
             subscription.save()
             
-            messagebox.showinfo("Success", "Subscription added successfully!")
+            messagebox.showinfo("Success", 
+                f"Subscription added successfully!\n"
+                f"Receipt Number: {subscription.receipt_number}")
+            
+            # Refresh interface
             self.load_students()
             self.load_student_subscriptions(student_id)
+            self.select_student_by_id(student_id)
             
+            # Clear subscription form but keep student data
+            self.clear_subscription_form()
+            
+        except ValidationError as e:
+            messagebox.showerror("Validation Error", str(e))
         except Exception as e:
             messagebox.showerror("Error", f"Failed to add subscription: {str(e)}")
+    
+    def clear_subscription_form(self):
+        """Clear only the subscription form fields, keep student data"""
+        self.timeslot_var.set("")
+        self.seat_var.set("")
+        self.duration_var.set("1")
+        self.amount_var.set("")
     
     def generate_receipt(self):
         """Generate PDF receipt"""

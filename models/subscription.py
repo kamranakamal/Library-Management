@@ -183,12 +183,16 @@ class Subscription:
     
     def check_overlap_with_student_subscriptions(self):
         """Check if this subscription overlaps with student's other subscriptions"""
+        # Only check for conflicts on the same seat
+        # Students can have multiple subscriptions on different seats simultaneously
         query = '''
-            SELECT COUNT(*) as conflicts
-            FROM student_subscriptions 
-            WHERE student_id = ? AND seat_id = ? AND is_active = 1
-            AND NOT (end_date < ? OR start_date > ?)
-            AND id != ?
+            SELECT ss.id, ss.start_date, ss.end_date, s.seat_number, t.name as timeslot_name
+            FROM student_subscriptions ss
+            JOIN seats s ON ss.seat_id = s.id
+            JOIN timeslots t ON ss.timeslot_id = t.id
+            WHERE ss.student_id = ? AND ss.seat_id = ? AND ss.is_active = 1
+            AND NOT (ss.end_date < ? OR ss.start_date > ?)
+            AND ss.id != ?
         '''
         params = (
             self.student_id, self.seat_id, self.start_date, 
@@ -196,7 +200,21 @@ class Subscription:
         )
         
         result = self.db_manager.execute_query(query, params)
-        return result[0]['conflicts'] > 0 if result else False
+        
+        if result and len(result) > 0:
+            # Store conflict details for better error messages
+            self._conflict_details = result[0]
+            return True
+        
+        return False
+    
+    def get_conflict_details(self):
+        """Get details about the conflicting subscription"""
+        if hasattr(self, '_conflict_details'):
+            conflict = self._conflict_details
+            return (f"Conflicts with existing subscription on Seat {conflict['seat_number']} "
+                   f"({conflict['timeslot_name']}) from {conflict['start_date']} to {conflict['end_date']}")
+        return "Conflicts with existing subscription"
     
     def renew(self, months=None):
         """Renew subscription for specified months"""
@@ -253,7 +271,7 @@ class Subscription:
         
         # Check for overlaps
         if self.check_overlap_with_student_subscriptions():
-            errors.append("This subscription conflicts with existing bookings")
+            errors.append(self.get_conflict_details())
         
         return errors
     

@@ -1,5 +1,23 @@
 # Library Management System - Changelog
 
+## Version 1.0.9 (2025-07-17) - Multiple Subscriptions Enhancement
+
+### New Features
+- **Multiple Subscriptions**: Students can now have multiple active subscriptions without duplicating student records
+- **Overlap Prevention**: Subscription validation prevents overlapping timeslots for the same student
+- **Smart Student Selection**: Automatically populates form when existing student is selected
+- **Receipt Generation**: Full support for receipts across all subscriptions
+
+### Current Development
+- **IMPLEMENTING**: Multiple subscription feature with overlap validation
+  - **FIXED**: Overlap validation now correctly allows multiple subscriptions on different seats
+  - **ENHANCED**: Added detailed conflict messages showing which subscription conflicts
+  - **IMPROVED**: Students can have multiple subscriptions as long as they don't overlap on the same seat
+  - Adding subscription overlap detection logic
+  - Updating UI to handle existing vs new student scenarios
+  - Ensuring receipt generation works for all subscriptions
+  - Maintaining data integrity across multiple subscriptions
+
 ## Version 1.0.8 (2025-07-17) - Registration Date & Bug Fixes
 
 ### New Features
