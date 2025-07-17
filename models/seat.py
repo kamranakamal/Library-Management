@@ -15,6 +15,46 @@ class Seat:
         self.is_active = True
         self.db_manager = DatabaseManager()
     
+    def save(self):
+        """Save seat to database"""
+        if self.id:
+            return self._update()
+        else:
+            return self._create()
+    
+    def _create(self):
+        """Create new seat record"""
+        if self.id:
+            # Explicit seat ID provided
+            query = '''
+                INSERT INTO seats (id, row_number, gender_restriction)
+                VALUES (?, ?, ?)
+            '''
+            params = (self.id, self.row_number, self.gender_restriction)
+        else:
+            # Auto-generate seat ID
+            query = '''
+                INSERT INTO seats (row_number, gender_restriction)
+                VALUES (?, ?)
+            '''
+            params = (self.row_number, self.gender_restriction)
+        
+        result = self.db_manager.execute_query(query, params)
+        if not self.id:
+            self.id = result
+        return self.id
+    
+    def _update(self):
+        """Update existing seat record"""
+        query = '''
+            UPDATE seats SET
+                row_number = ?, gender_restriction = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        '''
+        params = (self.row_number, self.gender_restriction, self.id)
+        self.db_manager.execute_query(query, params)
+        return self.id
+    
     @classmethod
     def get_by_id(cls, seat_id):
         """Get seat by ID"""

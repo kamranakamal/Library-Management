@@ -1,5 +1,43 @@
 # Library Management System - Changelog
 
+## Version 1.0.12 (2025-07-17) - Seat Management System
+
+### New Features
+- **Seat Management Interface**: Complete seat management system added after Student Management
+  - **Visual Seat Layout**: Interactive grid showing all 82 seats organized by rows
+  - **Gender Configuration**: Ability to change seat gender restrictions (Male/Female/Any)
+  - **Occupancy Protection**: Prevents editing of occupied seats to maintain data integrity
+  - **Real-time Status Display**: Shows current occupancy status and subscription details
+
+### Seat Management Features
+- **Default Configuration Support**:
+  - Row 1 & 10: Seats 1-9 and 72-82 for Girls (Female)
+  - Row 2-9: Seats 10-71 for Boys (Male)
+- **Safety Restrictions**:
+  - Cannot edit gender of occupied seats
+  - Clear visual indicators for occupied vs available seats
+  - Confirmation dialogs for bulk operations
+
+### User Interface Enhancements
+- **Interactive Seat Grid**: Click-to-select seats with color-coded status
+  - Light Blue: Male-only seats
+  - Light Pink: Female-only seats  
+  - Light Green: Any gender seats
+  - Light Coral: Currently occupied seats
+- **Detailed Occupancy View**: Shows all subscriptions for selected seat with timeslot and student information
+- **Bulk Operations**: Reset all seats to default configuration (skips occupied seats)
+
+### Technical Implementation
+- **Enhanced Seat Model**: Added save() method with create/update functionality
+- **Occupancy Validation**: Real-time checking of seat availability before allowing edits
+- **Cross-Module Integration**: Proper integration with subscription and student management systems
+- **Error Handling**: Comprehensive validation and user-friendly error messages
+
+### Files Added/Modified
+- `gui/seat_management.py`: Complete seat management interface
+- `models/seat.py`: Added save(), _create(), _update() methods
+- `gui/main_window.py`: Added seat management tab after student management
+
 ## Version 1.0.11 (2025-07-17) - Revenue Analytics Enhancement
 
 ### New Features

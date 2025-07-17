@@ -8,6 +8,7 @@ from config.settings import (
     APP_NAME, APP_VERSION, APP_AUTHOR, WINDOW_WIDTH, WINDOW_HEIGHT, BACKGROUND_COLOR
 )
 from gui.student_management import StudentManagementFrame
+from gui.seat_management import SeatManagementFrame
 from gui.timeslot_management import TimeslotManagementFrame
 from gui.analytics import AnalyticsFrame
 from gui.book_management import BookManagementFrame
@@ -77,6 +78,10 @@ class MainWindow:
         # Student Management tab
         self.student_frame = StudentManagementFrame(self.notebook)
         self.notebook.add(self.student_frame, text="Student Management")
+        
+        # Seat Management tab
+        self.seat_frame = SeatManagementFrame(self.notebook)
+        self.notebook.add(self.seat_frame, text="Seat Management")
         
         # Timeslot Management tab
         self.timeslot_frame = TimeslotManagementFrame(self.notebook)
