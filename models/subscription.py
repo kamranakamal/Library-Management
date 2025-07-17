@@ -254,6 +254,46 @@ class Subscription:
         
         return False
     
+    def check_seat_time_overlaps(self):
+        """Check if this subscription has time overlaps with other subscriptions on the same seat"""
+        from models.timeslot import Timeslot
+        
+        # Get this subscription's timeslot
+        this_timeslot = Timeslot.get_by_id(self.timeslot_id)
+        if not this_timeslot:
+            return False
+        
+        # Check for overlaps with other subscriptions on the same seat
+        overlap_query = '''
+            SELECT ss.id, ss.start_date, ss.end_date, s.id as seat_number, 
+                   t.name as timeslot_name, t.start_time, t.end_time
+            FROM student_subscriptions ss
+            JOIN seats s ON ss.seat_id = s.id
+            JOIN timeslots t ON ss.timeslot_id = t.id
+            WHERE ss.seat_id = ? AND ss.is_active = 1
+            AND NOT (ss.end_date < ? OR ss.start_date > ?)
+            AND ss.id != ?
+        '''
+        overlap_params = (
+            self.seat_id, self.start_date, self.end_date, self.id or 0
+        )
+        
+        overlap_result = self.db_manager.execute_query(overlap_query, overlap_params)
+        
+        for conflict in overlap_result:
+            # Check if the timeslots have time overlap
+            if this_timeslot.check_overlap(conflict['start_time'], conflict['end_time']):
+                self._conflict_details = {
+                    'type': 'time_overlap',
+                    'seat_number': conflict['seat_number'],
+                    'timeslot_name': conflict['timeslot_name'],
+                    'start_date': conflict['start_date'],
+                    'end_date': conflict['end_date']
+                }
+                return True
+        
+        return False
+    
     def get_conflict_details(self):
         """Get details about the conflicting subscription"""
         if hasattr(self, '_conflict_details'):
@@ -317,6 +357,10 @@ class Subscription:
         
         # Check for overlaps
         if self.check_overlap_with_student_subscriptions():
+            errors.append(self.get_conflict_details())
+        
+        # Check for time overlaps on the same seat with different timeslots
+        if self.check_seat_time_overlaps():
             errors.append(self.get_conflict_details())
         
         return errors

@@ -157,23 +157,43 @@ class Timeslot:
     
     def get_available_seats(self, gender):
         """Get available seats for this timeslot based on gender"""
+        # First get all seats matching gender criteria
         query = '''
             SELECT s.id, s.row_number
             FROM seats s
             WHERE s.is_active = 1 
             AND (s.gender_restriction = ? OR s.gender_restriction = 'Any')
-            AND s.id NOT IN (
-                SELECT DISTINCT ss.seat_id 
+            ORDER BY s.id
+        '''
+        all_seats = self.db_manager.execute_query(query, (gender,))
+        
+        # Filter out seats with time conflicts
+        available_seats = []
+        for seat in all_seats:
+            # Check for overlapping subscriptions on this seat
+            conflict_query = '''
+                SELECT ss.*, t.start_time, t.end_time
                 FROM student_subscriptions ss
+                JOIN timeslots t ON ss.timeslot_id = t.id
                 JOIN students st ON ss.student_id = st.id
-                WHERE ss.timeslot_id = ? 
+                WHERE ss.seat_id = ? 
                 AND ss.is_active = 1
                 AND st.is_active = 1
                 AND ss.end_date >= date('now')
-            )
-            ORDER BY s.id
-        '''
-        return self.db_manager.execute_query(query, (gender, self.id))
+            '''
+            existing_subs = self.db_manager.execute_query(conflict_query, (seat['id'],))
+            
+            # Check for time conflicts
+            has_conflict = False
+            for sub in existing_subs:
+                if self.check_overlap(sub['start_time'], sub['end_time']):
+                    has_conflict = True
+                    break
+            
+            if not has_conflict:
+                available_seats.append(seat)
+        
+        return available_seats
     
     def get_occupancy_rate(self):
         """Get occupancy rate for this timeslot"""

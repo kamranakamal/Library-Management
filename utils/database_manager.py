@@ -17,22 +17,35 @@ class DatabaseOperations:
     
     def get_available_seats_for_student(self, gender, timeslot_id):
         """Get available seats for a student based on gender and timeslot"""
+        # Get the new timeslot details
+        new_timeslot = Timeslot.get_by_id(timeslot_id)
+        if not new_timeslot:
+            return []
+        
         # Get seats restricted to the student's gender
         seats = Seat.get_by_gender(gender)
         
         # Filter seats that are available for the timeslot
         available_seats = []
         for seat in seats:
-            # Check if seat has any conflicting subscriptions for this timeslot
+            # Check if seat has any conflicting subscriptions based on time overlap
             query = '''
-                SELECT COUNT(*) as conflicts
-                FROM student_subscriptions 
-                WHERE seat_id = ? AND timeslot_id = ? AND is_active = 1
-                AND end_date >= date('now')
+                SELECT ss.*, t.start_time, t.end_time
+                FROM student_subscriptions ss
+                JOIN timeslots t ON ss.timeslot_id = t.id
+                WHERE ss.seat_id = ? AND ss.is_active = 1
+                AND ss.end_date >= date('now')
             '''
-            result = self.db_manager.execute_query(query, (seat.id, timeslot_id))
+            result = self.db_manager.execute_query(query, (seat.id,))
             
-            if result and result[0]['conflicts'] == 0:
+            # Check for time conflicts with existing subscriptions
+            has_conflict = False
+            for existing_sub in result:
+                if new_timeslot.check_overlap(existing_sub['start_time'], existing_sub['end_time']):
+                    has_conflict = True
+                    break
+            
+            if not has_conflict:
                 available_seats.append(seat)
         
         return available_seats

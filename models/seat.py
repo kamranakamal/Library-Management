@@ -117,14 +117,28 @@ class Seat:
     
     def is_available_for_timeslot(self, timeslot_id, start_date, end_date):
         """Check if seat is available for a specific timeslot and date range"""
+        # Get the timeslot details for the new booking
+        from models.timeslot import Timeslot
+        new_timeslot = Timeslot.get_by_id(timeslot_id)
+        if not new_timeslot:
+            return False
+        
+        # Get all existing subscriptions for this seat that overlap the date range
         query = '''
-            SELECT COUNT(*) as conflicts
-            FROM student_subscriptions 
-            WHERE seat_id = ? AND timeslot_id = ? AND is_active = 1
-            AND NOT (end_date < ? OR start_date > ?)
+            SELECT ss.*, t.start_time, t.end_time
+            FROM student_subscriptions ss
+            JOIN timeslots t ON ss.timeslot_id = t.id
+            WHERE ss.seat_id = ? AND ss.is_active = 1
+            AND NOT (ss.end_date < ? OR ss.start_date > ?)
         '''
-        result = self.db_manager.execute_query(query, (self.id, timeslot_id, start_date, end_date))
-        return result[0]['conflicts'] == 0 if result else False
+        existing_subs = self.db_manager.execute_query(query, (self.id, start_date, end_date))
+        
+        # Check for time conflicts with existing subscriptions
+        for sub in existing_subs:
+            if new_timeslot.check_overlap(sub['start_time'], sub['end_time']):
+                return False
+        
+        return True
     
     def get_occupancy_schedule(self):
         """Get detailed occupancy schedule for this seat"""
