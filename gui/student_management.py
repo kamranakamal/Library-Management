@@ -4,7 +4,7 @@ Student management interface
 
 import tkinter as tk
 from tkinter import ttk, messagebox
-from datetime import date
+from datetime import date, datetime, timedelta
 from models.student import Student
 from models.subscription import Subscription
 from models.seat import Seat
@@ -243,7 +243,23 @@ class StudentManagementFrame(ttk.Frame):
             self.subscription_tree.heading(col, text=col)
             self.subscription_tree.column(col, width=80)
         
-        self.subscription_tree.grid(row=0, column=0, sticky='nsew')
+        self.subscription_tree.grid(row=0, column=0, columnspan=4, sticky='nsew')
+        
+        # Subscription management buttons
+        button_frame = ttk.Frame(subs_frame)
+        button_frame.grid(row=1, column=0, columnspan=4, pady=5, sticky='ew')
+        
+        ttk.Button(button_frame, text="Edit Subscription", 
+                  command=self.edit_subscription).grid(row=0, column=0, padx=5)
+        ttk.Button(button_frame, text="Renew Subscription", 
+                  command=self.renew_subscription).grid(row=0, column=1, padx=5)
+        ttk.Button(button_frame, text="Delete Subscription", 
+                  command=self.delete_subscription).grid(row=0, column=2, padx=5)
+        ttk.Button(button_frame, text="View Receipt", 
+                  command=self.view_receipt).grid(row=0, column=3, padx=5)
+        
+        # Bind subscription selection event
+        self.subscription_tree.bind('<<TreeviewSelect>>', self.on_subscription_select)
         
         # Configure grid weights for subscriptions frame
         subs_frame.rowconfigure(0, weight=1)
@@ -373,6 +389,10 @@ class StudentManagementFrame(ttk.Frame):
             subscriptions = Subscription.get_by_student_id(student_id, active_only=False)
             
             for sub in subscriptions:
+                # Skip inactive (deleted) subscriptions
+                if not sub.is_active:
+                    continue
+                    
                 # Get related data
                 seat = Seat.get_by_id(sub.seat_id)
                 timeslot = Timeslot.get_by_id(sub.timeslot_id)
@@ -712,3 +732,417 @@ class StudentManagementFrame(ttk.Frame):
     def refresh(self):
         """Refresh the interface"""
         self.load_data()
+    
+    def on_subscription_select(self, event):
+        """Handle subscription selection"""
+        selection = self.subscription_tree.selection()
+        if selection:
+            # Enable subscription management buttons based on selection
+            pass
+    
+    def get_selected_subscription(self):
+        """Get the currently selected subscription"""
+        selection = self.subscription_tree.selection()
+        if not selection:
+            messagebox.showwarning("No Selection", "Please select a subscription first.")
+            return None
+        
+        # Get selected student
+        student_selection = self.student_tree.selection()
+        if not student_selection:
+            messagebox.showwarning("No Student", "Please select a student first.")
+            return None
+        
+        try:
+            # Get student ID
+            student_item = self.student_tree.item(student_selection[0])
+            student_id = student_item['values'][0]
+            
+            # Get subscription data from tree
+            subscription_item = self.subscription_tree.item(selection[0])
+            receipt_number = subscription_item['values'][0]
+            
+            # Find the subscription by receipt number
+            subscriptions = Subscription.get_by_student_id(student_id, active_only=False)
+            for sub in subscriptions:
+                if sub.receipt_number == receipt_number:
+                    return sub
+            
+            return None
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to get subscription: {str(e)}")
+            return None
+    
+    def edit_subscription(self):
+        """Edit selected subscription"""
+        subscription = self.get_selected_subscription()
+        if not subscription:
+            return
+        
+        # Create edit dialog
+        dialog = SubscriptionEditDialog(self, subscription)
+        self.wait_window(dialog)
+        
+        # Refresh if subscription was updated
+        if hasattr(dialog, 'updated') and dialog.updated:
+            student_selection = self.student_tree.selection()
+            if student_selection:
+                student_item = self.student_tree.item(student_selection[0])
+                student_id = student_item['values'][0]
+                self.load_student_subscriptions(student_id)
+                self.load_students()  # Refresh student list to update subscription count
+    
+    def renew_subscription(self):
+        """Renew selected subscription"""
+        subscription = self.get_selected_subscription()
+        if not subscription:
+            return
+        
+        # Create renewal dialog
+        dialog = SubscriptionRenewalDialog(self, subscription)
+        self.wait_window(dialog)
+        
+        # Refresh if subscription was renewed
+        if hasattr(dialog, 'renewed') and dialog.renewed:
+            student_selection = self.student_tree.selection()
+            if student_selection:
+                student_item = self.student_tree.item(student_selection[0])
+                student_id = student_item['values'][0]
+                self.load_student_subscriptions(student_id)
+                self.load_students()  # Refresh student list to update subscription count
+    
+    def delete_subscription(self):
+        """Delete selected subscription"""
+        subscription = self.get_selected_subscription()
+        if not subscription:
+            return
+        
+        # Confirm deletion
+        result = messagebox.askyesno(
+            "Confirm Deletion",
+            f"Are you sure you want to delete subscription {subscription.receipt_number}?\n\n"
+            f"This action cannot be undone!"
+        )
+        
+        if result:
+            try:
+                subscription.delete()
+                messagebox.showinfo("Success", "Subscription deleted successfully!")
+                
+                # Refresh displays
+                student_selection = self.student_tree.selection()
+                if student_selection:
+                    student_item = self.student_tree.item(student_selection[0])
+                    student_id = student_item['values'][0]
+                    self.load_student_subscriptions(student_id)
+                    self.load_students()  # Refresh student list to update subscription count
+                    
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to delete subscription: {str(e)}")
+    
+    def view_receipt(self):
+        """View receipt for selected subscription"""
+        subscription = self.get_selected_subscription()
+        if not subscription:
+            return
+        
+        try:
+            from utils.pdf_generator import PDFGenerator
+            
+            # Get student data
+            student = Student.get_by_id(subscription.student_id)
+            seat = Seat.get_by_id(subscription.seat_id)
+            timeslot = Timeslot.get_by_id(subscription.timeslot_id)
+            
+            if not all([student, seat, timeslot]):
+                messagebox.showerror("Error", "Failed to get complete subscription data")
+                return
+            
+            # Generate PDF
+            pdf_generator = PDFGenerator()
+            filename = f"receipt_{subscription.receipt_number}.pdf"
+            
+            pdf_generator.generate_subscription_receipt(
+                subscription, student, seat, timeslot, filename
+            )
+            
+            messagebox.showinfo("Success", f"Receipt saved as {filename}")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to generate receipt: {str(e)}")
+
+
+class SubscriptionEditDialog(tk.Toplevel):
+    """Dialog for editing subscription details"""
+    
+    def __init__(self, parent, subscription):
+        super().__init__(parent)
+        self.subscription = subscription
+        self.updated = False
+        
+        self.title("Edit Subscription")
+        self.geometry("400x300")
+        self.resizable(False, False)
+        
+        # Make dialog modal
+        self.transient(parent)
+        self.grab_set()
+        
+        self.setup_ui()
+        self.load_data()
+    
+    def setup_ui(self):
+        """Setup dialog UI"""
+        # Main frame
+        main_frame = ttk.Frame(self, padding=20)
+        main_frame.pack(fill='both', expand=True)
+        
+        # Title
+        ttk.Label(main_frame, text="Edit Subscription Details", 
+                 font=('Arial', 12, 'bold')).pack(pady=(0, 20))
+        
+        # Form fields
+        fields_frame = ttk.Frame(main_frame)
+        fields_frame.pack(fill='x', pady=10)
+        
+        # Receipt number (read-only)
+        ttk.Label(fields_frame, text="Receipt Number:").grid(row=0, column=0, sticky='w', pady=5)
+        self.receipt_label = ttk.Label(fields_frame, text="", foreground='blue')
+        self.receipt_label.grid(row=0, column=1, sticky='w', padx=(10, 0), pady=5)
+        
+        # Start date
+        ttk.Label(fields_frame, text="Start Date:").grid(row=1, column=0, sticky='w', pady=5)
+        self.start_date_var = tk.StringVar()
+        ttk.Entry(fields_frame, textvariable=self.start_date_var, width=25).grid(row=1, column=1, pady=5, padx=(10, 0))
+        
+        # End date
+        ttk.Label(fields_frame, text="End Date:").grid(row=2, column=0, sticky='w', pady=5)
+        self.end_date_var = tk.StringVar()
+        ttk.Entry(fields_frame, textvariable=self.end_date_var, width=25).grid(row=2, column=1, pady=5, padx=(10, 0))
+        
+        # Amount paid
+        ttk.Label(fields_frame, text="Amount Paid:").grid(row=3, column=0, sticky='w', pady=5)
+        self.amount_var = tk.StringVar()
+        ttk.Entry(fields_frame, textvariable=self.amount_var, width=25).grid(row=3, column=1, pady=5, padx=(10, 0))
+        
+        # Status
+        ttk.Label(fields_frame, text="Status:").grid(row=4, column=0, sticky='w', pady=5)
+        self.status_var = tk.StringVar()
+        status_combo = ttk.Combobox(fields_frame, textvariable=self.status_var, 
+                                   values=['Active', 'Inactive'], state='readonly', width=22)
+        status_combo.grid(row=4, column=1, pady=5, padx=(10, 0))
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill='x', pady=20)
+        
+        ttk.Button(button_frame, text="Save Changes", 
+                  command=self.save_changes).pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Cancel", 
+                  command=self.destroy).pack(side='right', padx=5)
+    
+    def load_data(self):
+        """Load subscription data into form"""
+        self.receipt_label.config(text=self.subscription.receipt_number)
+        self.start_date_var.set(self.subscription.start_date)
+        self.end_date_var.set(self.subscription.end_date)
+        self.amount_var.set(str(self.subscription.amount_paid))
+        self.status_var.set('Active' if self.subscription.is_active else 'Inactive')
+    
+    def save_changes(self):
+        """Save subscription changes"""
+        try:
+            # Validate dates
+            from datetime import datetime
+            start_date = datetime.strptime(self.start_date_var.get(), '%Y-%m-%d').date()
+            end_date = datetime.strptime(self.end_date_var.get(), '%Y-%m-%d').date()
+            
+            if end_date <= start_date:
+                messagebox.showerror("Error", "End date must be after start date")
+                return
+            
+            # Validate amount
+            try:
+                amount = float(self.amount_var.get())
+                if amount < 0:
+                    raise ValueError("Amount cannot be negative")
+            except ValueError:
+                messagebox.showerror("Error", "Please enter a valid amount")
+                return
+            
+            # Update subscription
+            self.subscription.start_date = self.start_date_var.get()
+            self.subscription.end_date = self.end_date_var.get()
+            self.subscription.amount_paid = amount
+            self.subscription.is_active = (self.status_var.get() == 'Active')
+            
+            self.subscription.save()
+            
+            self.updated = True
+            messagebox.showinfo("Success", "Subscription updated successfully!")
+            self.destroy()
+            
+        except ValueError as e:
+            messagebox.showerror("Error", f"Invalid date format. Use YYYY-MM-DD: {str(e)}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to update subscription: {str(e)}")
+
+
+class SubscriptionRenewalDialog(tk.Toplevel):
+    """Dialog for renewing subscription"""
+    
+    def __init__(self, parent, subscription):
+        super().__init__(parent)
+        self.subscription = subscription
+        self.renewed = False
+        
+        self.title("Renew Subscription")
+        self.geometry("450x350")
+        self.resizable(False, False)
+        
+        # Make dialog modal
+        self.transient(parent)
+        self.grab_set()
+        
+        self.setup_ui()
+        self.load_data()
+    
+    def setup_ui(self):
+        """Setup dialog UI"""
+        # Main frame
+        main_frame = ttk.Frame(self, padding=20)
+        main_frame.pack(fill='both', expand=True)
+        
+        # Title
+        ttk.Label(main_frame, text="Renew Subscription", 
+                 font=('Arial', 12, 'bold')).pack(pady=(0, 20))
+        
+        # Current subscription info
+        info_frame = ttk.LabelFrame(main_frame, text="Current Subscription", padding=10)
+        info_frame.pack(fill='x', pady=10)
+        
+        ttk.Label(info_frame, text=f"Receipt: {self.subscription.receipt_number}").pack(anchor='w')
+        ttk.Label(info_frame, text=f"Current End Date: {self.subscription.end_date}").pack(anchor='w')
+        ttk.Label(info_frame, text=f"Current Amount: ₹{self.subscription.amount_paid}").pack(anchor='w')
+        
+        # Renewal form
+        renewal_frame = ttk.LabelFrame(main_frame, text="Renewal Details", padding=10)
+        renewal_frame.pack(fill='x', pady=10)
+        
+        # Duration
+        ttk.Label(renewal_frame, text="Extend by (days):").grid(row=0, column=0, sticky='w', pady=5)
+        self.days_var = tk.StringVar(value="30")
+        ttk.Entry(renewal_frame, textvariable=self.days_var, width=10).grid(row=0, column=1, pady=5, padx=(10, 0))
+        
+        # Quick duration buttons
+        duration_frame = ttk.Frame(renewal_frame)
+        duration_frame.grid(row=1, column=0, columnspan=2, pady=5)
+        
+        ttk.Button(duration_frame, text="1 Month", width=8,
+                  command=lambda: self.days_var.set("30")).pack(side='left', padx=2)
+        ttk.Button(duration_frame, text="3 Months", width=8,
+                  command=lambda: self.days_var.set("90")).pack(side='left', padx=2)
+        ttk.Button(duration_frame, text="6 Months", width=8,
+                  command=lambda: self.days_var.set("180")).pack(side='left', padx=2)
+        
+        # Amount
+        ttk.Label(renewal_frame, text="Amount:").grid(row=2, column=0, sticky='w', pady=5)
+        self.amount_var = tk.StringVar()
+        ttk.Entry(renewal_frame, textvariable=self.amount_var, width=15).grid(row=2, column=1, pady=5, padx=(10, 0))
+        
+        # New end date (calculated)
+        ttk.Label(renewal_frame, text="New End Date:").grid(row=3, column=0, sticky='w', pady=5)
+        self.new_end_date_label = ttk.Label(renewal_frame, text="", foreground='blue')
+        self.new_end_date_label.grid(row=3, column=1, sticky='w', padx=(10, 0), pady=5)
+        
+        # Bind days change to update end date
+        self.days_var.trace('w', self.calculate_new_end_date)
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill='x', pady=20)
+        
+        ttk.Button(button_frame, text="Renew Subscription", 
+                  command=self.renew_subscription).pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Cancel", 
+                  command=self.destroy).pack(side='right', padx=5)
+    
+    def load_data(self):
+        """Load default renewal data"""
+        # Get timeslot to suggest amount
+        timeslot = Timeslot.get_by_id(self.subscription.timeslot_id)
+        if timeslot:
+            self.amount_var.set(str(timeslot.price))
+        
+        self.calculate_new_end_date()
+    
+    def calculate_new_end_date(self, *args):
+        """Calculate and display new end date"""
+        try:
+            days = int(self.days_var.get())
+            from datetime import datetime, timedelta
+            
+            current_end = datetime.strptime(self.subscription.end_date, '%Y-%m-%d').date()
+            new_end = current_end + timedelta(days=days)
+            
+            self.new_end_date_label.config(text=str(new_end))
+        except (ValueError, TypeError):
+            self.new_end_date_label.config(text="Invalid days")
+    
+    def renew_subscription(self):
+        """Renew the subscription"""
+        try:
+            # Validate inputs
+            days = int(self.days_var.get())
+            if days <= 0:
+                messagebox.showerror("Error", "Days must be positive")
+                return
+            
+            amount = float(self.amount_var.get())
+            if amount < 0:
+                messagebox.showerror("Error", "Amount cannot be negative")
+                return
+            
+            # Calculate new end date
+            from datetime import datetime, timedelta
+            current_end = datetime.strptime(self.subscription.end_date, '%Y-%m-%d').date()
+            new_end = current_end + timedelta(days=days)
+            
+            # Create renewal (new subscription record)
+            new_subscription = Subscription(
+                student_id=self.subscription.student_id,
+                seat_id=self.subscription.seat_id,
+                timeslot_id=self.subscription.timeslot_id,
+                start_date=str(current_end + timedelta(days=1)),
+                end_date=str(new_end),
+                amount_paid=amount,
+                payment_date=str(date.today()),
+                is_active=True
+            )
+            
+            new_subscription.save()
+            
+            # Generate receipt
+            try:
+                from utils.pdf_generator import PDFGenerator
+                student = Student.get_by_id(self.subscription.student_id)
+                seat = Seat.get_by_id(self.subscription.seat_id)
+                timeslot = Timeslot.get_by_id(self.subscription.timeslot_id)
+                
+                pdf_generator = PDFGenerator()
+                filename = f"renewal_receipt_{new_subscription.receipt_number}.pdf"
+                
+                pdf_generator.generate_renewal_receipt(
+                    new_subscription, student, seat, timeslot, filename
+                )
+            except Exception as e:
+                print(f"Receipt generation failed: {e}")
+            
+            self.renewed = True
+            messagebox.showinfo("Success", f"Subscription renewed successfully!\nNew receipt: {new_subscription.receipt_number}")
+            self.destroy()
+            
+        except ValueError:
+            messagebox.showerror("Error", "Please enter valid numbers for days and amount")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to renew subscription: {str(e)}")

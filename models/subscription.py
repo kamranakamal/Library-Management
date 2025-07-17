@@ -97,6 +97,15 @@ class Subscription:
         self.db_manager.execute_query(query, (self.id,))
         self.is_active = False
     
+    def hard_delete(self):
+        """Permanently delete subscription from database"""
+        if not self.id:
+            raise ValueError("Cannot delete subscription without ID")
+        
+        query = "DELETE FROM student_subscriptions WHERE id = ?"
+        self.db_manager.execute_query(query, (self.id,))
+        self.id = None
+    
     @classmethod
     def get_by_id(cls, subscription_id):
         """Get subscription by ID"""

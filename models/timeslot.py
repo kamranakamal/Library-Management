@@ -122,13 +122,15 @@ class Timeslot:
         other_is_overnight = self._is_overnight_timeslot(other_start, other_end)
         
         if self_is_overnight and other_is_overnight:
-            # Both are overnight - they overlap if either start/end times overlap
-            return True  # Simplification: assume overnight slots are exclusive
+            # Both are overnight - they always overlap since they both span midnight
+            return True
         elif self_is_overnight and not other_is_overnight:
-            # Self is overnight, other is not - check if other falls in our range
+            # Self is overnight (e.g., 22:00-06:00), other is regular (e.g., 08:00-14:00)
+            # Overlap if other time falls in either [self_start, 23:59] or [00:00, self_end]
             return (other_start >= self_start or other_end <= self_end)
         elif not self_is_overnight and other_is_overnight:
-            # Other is overnight, self is not - check if self falls in their range
+            # Other is overnight, self is regular
+            # Overlap if self time falls in either [other_start, 23:59] or [00:00, other_end]
             return (self_start >= other_start or self_end <= other_end)
         else:
             # Neither is overnight - standard overlap check
