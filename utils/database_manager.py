@@ -76,9 +76,12 @@ class DatabaseOperations:
         
         # Occupied seats (with active subscriptions)
         query = '''
-            SELECT COUNT(DISTINCT seat_id) as occupied_seats
-            FROM student_subscriptions 
-            WHERE is_active = 1 AND end_date >= date('now')
+            SELECT COUNT(DISTINCT ss.seat_id) as occupied_seats
+            FROM student_subscriptions ss
+            JOIN students s ON ss.student_id = s.id
+            WHERE ss.is_active = 1 
+            AND s.is_active = 1
+            AND ss.end_date >= date('now')
         '''
         result = self.db_manager.execute_query(query)
         analytics['occupied_seats'] = result[0]['occupied_seats'] if result else 0
@@ -88,19 +91,25 @@ class DatabaseOperations:
         
         # Slots per seat
         query = '''
-            SELECT seat_id, COUNT(*) as slot_count
-            FROM student_subscriptions 
-            WHERE is_active = 1 AND end_date >= date('now')
-            GROUP BY seat_id
+            SELECT ss.seat_id, COUNT(*) as slot_count
+            FROM student_subscriptions ss
+            JOIN students s ON ss.student_id = s.id
+            WHERE ss.is_active = 1 
+            AND s.is_active = 1
+            AND ss.end_date >= date('now')
+            GROUP BY ss.seat_id
         '''
         seats_usage = self.db_manager.execute_query(query)
         analytics['seats_usage'] = {row['seat_id']: row['slot_count'] for row in seats_usage}
         
         # Students with assignments vs unassigned
         query = '''
-            SELECT COUNT(DISTINCT student_id) as assigned_students
-            FROM student_subscriptions 
-            WHERE is_active = 1 AND end_date >= date('now')
+            SELECT COUNT(DISTINCT ss.student_id) as assigned_students
+            FROM student_subscriptions ss
+            JOIN students s ON ss.student_id = s.id
+            WHERE ss.is_active = 1 
+            AND s.is_active = 1
+            AND ss.end_date >= date('now')
         '''
         result = self.db_manager.execute_query(query)
         analytics['assigned_students'] = result[0]['assigned_students'] if result else 0

@@ -351,7 +351,7 @@ class StudentManagementFrame(ttk.Frame):
                 self.aadhaar_var.set(student.aadhaar_number or "")
                 self.email_var.set(student.email or "")
                 self.locker_var.set(student.locker_number or "")
-                self.registration_date_var.set(student.registration_date)
+                self.reg_date_var.set(student.registration_date)
                 
                 # Load subscriptions
                 self.load_student_subscriptions(student_id)
@@ -403,7 +403,7 @@ class StudentManagementFrame(ttk.Frame):
                 'aadhaar_number': self.aadhaar_var.get(),
                 'email': self.email_var.get(),
                 'locker_number': self.locker_var.get(),
-                'registration_date': self.registration_date_var.get()
+                'registration_date': self.reg_date_var.get()
             }
             
             validated_data = Validators.validate_student_data(student_data)
@@ -521,7 +521,7 @@ class StudentManagementFrame(ttk.Frame):
         self.aadhaar_var.set("")
         self.email_var.set("")
         self.locker_var.set("")
-        self.registration_date_var.set("")
+        self.reg_date_var.set("")
         self.timeslot_var.set("")
         self.seat_var.set("")
         self.duration_var.set("1")
@@ -571,7 +571,7 @@ class StudentManagementFrame(ttk.Frame):
                 'aadhaar_number': self.aadhaar_var.get(),
                 'email': self.email_var.get(),
                 'locker_number': self.locker_var.get(),
-                'registration_date': self.registration_date_var.get()
+                'registration_date': self.reg_date_var.get()
             }
             
             validated_data = Validators.validate_student_data(student_data)
