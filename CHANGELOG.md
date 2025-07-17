@@ -1,5 +1,36 @@
 # Library Management System - Changelog
 
+## Version 1.0.13 (2025-07-17) - Library Information Integration
+
+### New Features
+- **Library Information Configuration**: Added complete library details for receipts and WhatsApp alerts
+  - **Library Name**: Sangharsh Library
+  - **Phone**: +91 85219 10999
+  - **Email**: sangharshlibrary7@gmail.com
+  - **Address**: Rajgir Road, Opp. of Kohinoor Furniture, Malahbigha, Islampur, Nalanda, Bihar 801303
+
+### Receipt Generation Enhancements
+- **Professional Header Design**: All PDF receipts now include complete library information
+  - Library name prominently displayed
+  - Full address and contact details
+  - Professional formatting with proper spacing
+- **Enhanced Receipt Templates**:
+  - Subscription receipts with library branding
+  - Renewal receipts with complete contact information
+  - Monthly reports with library header
+
+### WhatsApp Automation Updates
+- **Branded Message Templates**: All WhatsApp messages now include library information
+  - **Subscription Reminders**: Include library name, address, phone, and email
+  - **Overdue Book Reminders**: Professional format with complete contact details
+  - **Subscription Confirmations**: Welcome messages with library branding
+- **Consistent Branding**: All communications maintain professional library identity
+
+### Technical Implementation
+- **Centralized Configuration**: Library information stored in config/settings.py
+- **Template Integration**: All message and receipt templates updated to use library details
+- **Professional Formatting**: Consistent use of emojis and formatting for better readability
+
 ## Version 1.0.12 (2025-07-17) - Seat Management System
 
 ### New Features
