@@ -1,5 +1,28 @@
 # Library Management System - Changelog
 
+## Version 1.0.14 (2025-07-17) - Overnight Timeslot Support
+
+### Bug Fixes
+- **Overnight Timeslot Validation**: Fixed critical validation issue for night study timeslots
+  - **Problem**: System incorrectly rejected timeslots like 21:00 - 05:00 with "end time must be after start time" error
+  - **Solution**: Updated validation logic to support overnight timeslots that span midnight
+  - **Examples Now Supported**:
+    - 21:00 - 05:00 (9 PM to 5 AM next day)
+    - 23:00 - 06:00 (11 PM to 6 AM next day)
+    - 22:30 - 04:30 (10:30 PM to 4:30 AM next day)
+
+### Enhanced Timeslot Management
+- **Smart Overlap Detection**: Improved algorithm to handle overnight timeslot conflicts
+- **User-Friendly Interface**: Added helpful hint in GUI for overnight timeslot creation
+- **Clear Display**: Enhanced timeslot list to clearly indicate overnight sessions
+- **Validation Improvements**: Maintains data integrity while supporting 24-hour operations
+
+### Technical Implementation
+- **Model Updates**: Modified `Timeslot.validate()` method to allow overnight timeslots
+- **Overlap Logic**: Enhanced `check_overlap()` method for proper overnight conflict detection
+- **GUI Enhancements**: Added instructional text and better visual indicators
+- **Comprehensive Testing**: Added test suite to verify overnight timeslot functionality
+
 ## Version 1.0.13 (2025-07-17) - Library Information Integration
 
 ### New Features

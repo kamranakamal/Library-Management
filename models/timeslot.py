@@ -117,8 +117,28 @@ class Timeslot:
         other_start = self._parse_time(other_start)
         other_end = self._parse_time(other_end)
         
-        # Check for overlap
-        return not (self_end <= other_start or self_start >= other_end)
+        # Handle overnight timeslots
+        self_is_overnight = self._is_overnight_timeslot(self_start, self_end)
+        other_is_overnight = self._is_overnight_timeslot(other_start, other_end)
+        
+        if self_is_overnight and other_is_overnight:
+            # Both are overnight - they overlap if either start/end times overlap
+            return True  # Simplification: assume overnight slots are exclusive
+        elif self_is_overnight and not other_is_overnight:
+            # Self is overnight, other is not - check if other falls in our range
+            return (other_start >= self_start or other_end <= self_end)
+        elif not self_is_overnight and other_is_overnight:
+            # Other is overnight, self is not - check if self falls in their range
+            return (self_start >= other_start or self_end <= other_end)
+        else:
+            # Neither is overnight - standard overlap check
+            return not (self_end <= other_start or self_start >= other_end)
+    
+    def _is_overnight_timeslot(self, start_time, end_time):
+        """Check if a timeslot spans overnight (end time is next day)"""
+        if not start_time or not end_time:
+            return False
+        return start_time > end_time
     
     def _parse_time(self, time_value):
         """Parse time value to time object"""
@@ -185,8 +205,10 @@ class Timeslot:
         if self.start_time and self.end_time:
             start = self._parse_time(self.start_time)
             end = self._parse_time(self.end_time)
-            if start and end and start >= end:
-                errors.append("End time must be after start time")
+            if start and end:
+                # Allow overnight timeslots (where start > end, indicating next day end)
+                # Only validate that both times are valid, not their relationship
+                pass
         
         if not self.price or self.price <= 0:
             errors.append("Price must be greater than 0")

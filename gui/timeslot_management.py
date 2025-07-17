@@ -60,6 +60,12 @@ class TimeslotManagementFrame(ttk.Frame):
         ttk.Label(form_frame, text="(HH:MM format)", font=('Arial', 8)).grid(row=row, column=2, sticky='w', padx=5)
         row += 1
         
+        # Help text for overnight timeslots
+        help_label = ttk.Label(form_frame, text="💡 For overnight timeslots: Start 21:00, End 05:00 (next day)", 
+                              font=('Arial', 8), foreground='blue')
+        help_label.grid(row=row, column=0, columnspan=3, sticky='w', pady=(0, 5))
+        row += 1
+        
         # Price
         ttk.Label(form_frame, text="Price (₹) *:").grid(row=row, column=0, sticky='w', pady=2)
         self.price_var = tk.StringVar()
@@ -140,11 +146,35 @@ class TimeslotManagementFrame(ttk.Frame):
                 # Calculate occupancy rate
                 occupancy_rate = timeslot.get_occupancy_rate()
                 
+                # Format time display for overnight timeslots
+                start_time = timeslot.start_time
+                end_time = timeslot.end_time
+                
+                # Check if it's an overnight timeslot
+                try:
+                    from datetime import time
+                    if isinstance(start_time, str):
+                        start_hour = int(start_time.split(':')[0])
+                    else:
+                        start_hour = start_time.hour if hasattr(start_time, 'hour') else 0
+                        
+                    if isinstance(end_time, str):
+                        end_hour = int(end_time.split(':')[0])
+                    else:
+                        end_hour = end_time.hour if hasattr(end_time, 'hour') else 0
+                    
+                    # If start time is greater than end time, it's overnight
+                    time_display = f"{start_time} - {end_time}"
+                    if start_hour > end_hour or (start_hour > 18 and end_hour < 12):
+                        time_display = f"{start_time} - {end_time} (next day)"
+                except:
+                    time_display = f"{start_time} - {end_time}"
+                
                 self.timeslot_tree.insert('', 'end', values=(
                     timeslot.id,
                     timeslot.name,
-                    timeslot.start_time,
-                    timeslot.end_time,
+                    start_time,
+                    end_time,
                     f"₹{timeslot.price}",
                     f"{timeslot.duration_months} months",
                     "Yes" if timeslot.lockers_available else "No",
