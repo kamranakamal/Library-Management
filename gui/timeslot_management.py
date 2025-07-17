@@ -49,15 +49,24 @@ class TimeslotManagementFrame(ttk.Frame):
         # Start Time
         ttk.Label(form_frame, text="Start Time *:").grid(row=row, column=0, sticky='w', pady=2)
         self.start_time_var = tk.StringVar()
-        ttk.Entry(form_frame, textvariable=self.start_time_var, width=25).grid(row=row, column=1, pady=2)
-        ttk.Label(form_frame, text="(HH:MM format)", font=('Arial', 8)).grid(row=row, column=2, sticky='w', padx=5)
+        
+        # Create time options (24-hour format)
+        time_options = self._generate_time_options()
+        
+        start_time_combo = ttk.Combobox(form_frame, textvariable=self.start_time_var, 
+                                       values=time_options, state='readonly', width=22)
+        start_time_combo.grid(row=row, column=1, pady=2)
+        ttk.Label(form_frame, text="Select from dropdown", font=('Arial', 8)).grid(row=row, column=2, sticky='w', padx=5)
         row += 1
         
         # End Time
         ttk.Label(form_frame, text="End Time *:").grid(row=row, column=0, sticky='w', pady=2)
         self.end_time_var = tk.StringVar()
-        ttk.Entry(form_frame, textvariable=self.end_time_var, width=25).grid(row=row, column=1, pady=2)
-        ttk.Label(form_frame, text="(HH:MM format)", font=('Arial', 8)).grid(row=row, column=2, sticky='w', padx=5)
+        
+        end_time_combo = ttk.Combobox(form_frame, textvariable=self.end_time_var, 
+                                     values=time_options, state='readonly', width=22)
+        end_time_combo.grid(row=row, column=1, pady=2)
+        ttk.Label(form_frame, text="Select from dropdown", font=('Arial', 8)).grid(row=row, column=2, sticky='w', padx=5)
         row += 1
         
         # Help text for overnight timeslots
@@ -65,6 +74,31 @@ class TimeslotManagementFrame(ttk.Frame):
                               font=('Arial', 8), foreground='blue')
         help_label.grid(row=row, column=0, columnspan=3, sticky='w', pady=(0, 5))
         row += 1
+        
+        # Quick preset buttons
+        preset_frame = ttk.LabelFrame(form_frame, text="Quick Presets", padding=5)
+        preset_frame.grid(row=row, column=0, columnspan=3, sticky='ew', pady=5)
+        row += 1
+        
+        # Preset buttons
+        preset_row = 0
+        
+        # Morning shift
+        ttk.Button(preset_frame, text="Morning (06:00-12:00)", 
+                  command=lambda: self._set_preset("06:00", "12:00")).grid(row=preset_row, column=0, padx=2, pady=2)
+        ttk.Button(preset_frame, text="Afternoon (12:00-18:00)", 
+                  command=lambda: self._set_preset("12:00", "18:00")).grid(row=preset_row, column=1, padx=2, pady=2)
+        ttk.Button(preset_frame, text="Evening (18:00-21:00)", 
+                  command=lambda: self._set_preset("18:00", "21:00")).grid(row=preset_row, column=2, padx=2, pady=2)
+        preset_row += 1
+        
+        # Night and extended shifts
+        ttk.Button(preset_frame, text="Night (21:00-05:00)", 
+                  command=lambda: self._set_preset("21:00", "05:00")).grid(row=preset_row, column=0, padx=2, pady=2)
+        ttk.Button(preset_frame, text="Early Morning (05:00-09:00)", 
+                  command=lambda: self._set_preset("05:00", "09:00")).grid(row=preset_row, column=1, padx=2, pady=2)
+        ttk.Button(preset_frame, text="Late Night (22:00-06:00)", 
+                  command=lambda: self._set_preset("22:00", "06:00")).grid(row=preset_row, column=2, padx=2, pady=2)
         
         # Price
         ttk.Label(form_frame, text="Price (₹) *:").grid(row=row, column=0, sticky='w', pady=2)
@@ -131,9 +165,36 @@ class TimeslotManagementFrame(ttk.Frame):
         # Bind selection event
         self.timeslot_tree.bind('<<TreeviewSelect>>', self.on_timeslot_select)
         
-        # Refresh button
-        ttk.Button(list_frame, text="Refresh", command=self.load_data).grid(row=2, column=0, pady=10)
+        # Refresh button        ttk.Button(list_frame, text="Refresh", command=self.load_data).grid(row=2, column=0, pady=10)
     
+    def _generate_time_options(self):
+        """Generate time options for dropdown (every 30 minutes)"""
+        time_options = []
+        
+        # Generate times from 00:00 to 23:30 in 30-minute intervals
+        for hour in range(24):
+            for minute in [0, 30]:
+                time_str = f"{hour:02d}:{minute:02d}"
+                time_options.append(time_str)
+        
+        # Add some common specific times that might be used
+        common_times = ["05:00", "05:30", "06:00", "06:30", "07:00", "07:30", "08:00", "08:30", 
+                       "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30",
+                       "13:00", "13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30",
+                       "17:00", "17:30", "18:00", "18:30", "19:00", "19:30", "20:00", "20:30",
+                       "21:00", "21:30", "22:00", "22:30", "23:00", "23:30"]
+        
+        # Remove duplicates and sort
+        all_times = list(set(time_options))
+        all_times.sort()
+        
+        return all_times
+
+    def _set_preset(self, start_time, end_time):
+        """Set preset start and end times"""
+        self.start_time_var.set(start_time)
+        self.end_time_var.set(end_time)
+
     def load_data(self):
         """Load timeslots into the tree"""
         # Clear existing items
