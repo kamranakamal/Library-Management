@@ -163,6 +163,28 @@ class Subscription:
         return results
     
     @classmethod
+    def get_expired_subscriptions(cls, days_expired=7):
+        """Get subscriptions that have expired within specified days"""
+        db_manager = DatabaseManager()
+        cutoff_date = date.today() - timedelta(days=days_expired)
+        
+        query = '''
+            SELECT ss.*, s.name as student_name, s.mobile_number,
+                   seat.id as seat_number, t.name as timeslot_name
+            FROM student_subscriptions ss
+            JOIN students s ON ss.student_id = s.id
+            JOIN seats seat ON ss.seat_id = seat.id
+            JOIN timeslots t ON ss.timeslot_id = t.id
+            WHERE ss.is_active = 1 AND s.is_active = 1 
+                  AND ss.end_date < date('now') 
+                  AND ss.end_date >= ?
+            ORDER BY ss.end_date DESC
+        '''
+        
+        results = db_manager.execute_query(query, (cutoff_date,))
+        return results
+    
+    @classmethod
     def _from_row(cls, row):
         """Create Subscription object from database row"""
         from datetime import datetime

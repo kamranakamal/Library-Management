@@ -35,6 +35,9 @@ class WhatsAppWindow:
         # Reminders tab
         self.create_reminders_tab(notebook)
         
+        # Subscription cancellations tab
+        self.create_cancellations_tab(notebook)
+        
         # Custom messages tab
         self.create_custom_messages_tab(notebook)
     
@@ -132,6 +135,67 @@ Note: Keep this window open while using WhatsApp automation.
                   command=self.load_expiring_subscriptions).pack(side='left', padx=5)
         ttk.Button(button_frame, text="Send Reminders", 
                   command=self.send_subscription_reminders).pack(side='left', padx=5)
+    
+    def create_cancellations_tab(self, parent):
+        """Create subscription cancellations tab"""
+        cancellations_frame = ttk.Frame(parent)
+        parent.add(cancellations_frame, text="Subscription Cancellations")
+        
+        # Instructions
+        instructions = """
+This feature sends cancellation notifications to students whose subscriptions have expired.
+The message includes readmission contact information and encourages them to return.
+        """.strip()
+        
+        ttk.Label(cancellations_frame, text=instructions, justify='left', 
+                 font=('Arial', 10), wraplength=700).pack(pady=10)
+        
+        # Options frame
+        options_frame = ttk.LabelFrame(cancellations_frame, text="Cancellation Options", padding=10)
+        options_frame.pack(fill='x', pady=10)
+        
+        # Days since expiry
+        ttk.Label(options_frame, text="Send cancellations for subscriptions expired within:").pack(anchor='w')
+        days_frame = ttk.Frame(options_frame)
+        days_frame.pack(fill='x', pady=5)
+        
+        self.cancellation_days_var = tk.StringVar(value="7")
+        tk.Spinbox(days_frame, from_=1, to=30, textvariable=self.cancellation_days_var, width=10).pack(side='left')
+        ttk.Label(days_frame, text="days").pack(side='left', padx=5)
+        
+        # Warning frame
+        warning_frame = ttk.Frame(options_frame)
+        warning_frame.pack(fill='x', pady=10)
+        
+        warning_text = "⚠️ This will send cancellation messages to expired students. Use carefully!"
+        ttk.Label(warning_frame, text=warning_text, foreground='red', font=('Arial', 10, 'bold')).pack()
+        
+        # Preview frame
+        preview_frame = ttk.LabelFrame(cancellations_frame, text="Expired Subscriptions", padding=10)
+        preview_frame.pack(fill='both', expand=True, pady=10)
+        
+        # Expired subscriptions tree
+        columns = ('Student', 'Mobile', 'Seat', 'Timeslot', 'Expired Date', 'Days Expired')
+        self.cancellation_tree = ttk.Treeview(preview_frame, columns=columns, show='headings', height=8)
+        
+        for col in columns:
+            self.cancellation_tree.heading(col, text=col)
+            self.cancellation_tree.column(col, width=100)
+        
+        scrollbar2 = ttk.Scrollbar(preview_frame, orient='vertical', command=self.cancellation_tree.yview)
+        self.cancellation_tree.configure(yscrollcommand=scrollbar2.set)
+        
+        self.cancellation_tree.pack(side='left', fill='both', expand=True)
+        scrollbar2.pack(side='right', fill='y')
+        
+        # Buttons
+        button_frame = ttk.Frame(cancellations_frame)
+        button_frame.pack(pady=10)
+        
+        ttk.Button(button_frame, text="Load Expired Subscriptions", 
+                  command=self.load_expired_subscriptions).pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Send Cancellation Messages", 
+                  command=self.send_cancellation_messages).pack(side='left', padx=5)
     
     def create_custom_messages_tab(self, parent):
         """Create custom messages tab"""
@@ -292,6 +356,89 @@ Note: Keep this window open while using WhatsApp automation.
         
         # Confirm before sending
         if messagebox.askyesno("Confirm", "Send subscription reminders to all expiring students?"):
+            threading.Thread(target=send_thread, daemon=True).start()
+    
+    def load_expired_subscriptions(self):
+        """Load expired subscriptions for cancellation messages"""
+        try:
+            days = int(self.cancellation_days_var.get())
+            from models.subscription import Subscription
+            
+            expired_subs = Subscription.get_expired_subscriptions(days_expired=days)
+            
+            # Clear existing items
+            for item in self.cancellation_tree.get_children():
+                self.cancellation_tree.delete(item)
+            
+            # Add expired subscriptions to tree
+            for sub in expired_subs:
+                from datetime import date, datetime
+                
+                # Calculate days expired
+                end_date = datetime.strptime(sub['end_date'], '%Y-%m-%d').date()
+                days_expired = (date.today() - end_date).days
+                
+                self.cancellation_tree.insert('', 'end', values=(
+                    sub['student_name'],
+                    sub['mobile_number'],
+                    sub['seat_number'],
+                    sub['timeslot_name'],
+                    sub['end_date'],
+                    f"{days_expired} days"
+                ))
+            
+            self.log_message(f"Loaded {len(expired_subs)} expired subscriptions for cancellation")
+            
+        except Exception as e:
+            self.log_message(f"Error loading expired subscriptions: {str(e)}")
+            messagebox.showerror("Error", f"Failed to load expired subscriptions: {str(e)}")
+    
+    def send_cancellation_messages(self):
+        """Send cancellation messages to expired students"""
+        # Get expired subscriptions from tree
+        expired_subs = []
+        for item in self.cancellation_tree.get_children():
+            values = self.cancellation_tree.item(item)['values']
+            expired_subs.append({
+                'student_name': values[0],
+                'mobile_number': values[1],
+                'seat_number': values[2],
+                'timeslot_name': values[3],
+                'end_date': values[4]
+            })
+        
+        if not expired_subs:
+            messagebox.showwarning("Warning", "No expired subscriptions loaded. Please load expired subscriptions first.")
+            return
+        
+        def send_thread():
+            try:
+                self.log_message(f"Sending cancellation messages to {len(expired_subs)} students...")
+                
+                results = self.whatsapp.send_subscription_cancellations(expired_subs)
+                
+                successful = len([r for r in results if r['success']])
+                failed = len(results) - successful
+                
+                self.log_message(f"Cancellation messages sent: {successful} successful, {failed} failed")
+                
+                # Show detailed results
+                for result in results:
+                    status = "✓" if result['success'] else "✗"
+                    self.log_message(f"{status} {result['name']}: {result['message']}")
+                
+            except Exception as e:
+                self.log_message(f"Error sending cancellation messages: {str(e)}")
+        
+        # Confirm before sending with warning
+        warning_message = (
+            f"⚠️ WARNING: This will send CANCELLATION messages to {len(expired_subs)} students.\n\n"
+            "These messages inform students that their subscriptions have been cancelled "
+            "due to expiration and provide readmission contact information.\n\n"
+            "Are you sure you want to proceed?"
+        )
+        
+        if messagebox.askyesno("Confirm Cancellation Messages", warning_message):
             threading.Thread(target=send_thread, daemon=True).start()
     
     def send_custom_messages(self):

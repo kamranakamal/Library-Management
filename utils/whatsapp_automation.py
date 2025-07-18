@@ -360,6 +360,48 @@ Thank you for choosing {LIBRARY_NAME}!
         
         return self.send_bulk_messages(messages)
     
+    def send_subscription_cancellations(self, expired_subscriptions):
+        """Send subscription cancellation messages to expired students"""
+        messages = []
+        
+        for subscription in expired_subscriptions:
+            message = f"""
+Dear {subscription['student_name']},
+
+We regret to inform you that your library subscription has been cancelled due to expiration.
+
+📋 Expired Subscription Details:
+- Seat Number: {subscription['seat_number']}
+- Timeslot: {subscription['timeslot_name']}
+- Expiry Date: {subscription['end_date']}
+
+🔄 For Readmission:
+If you wish to continue using our library services, please contact us immediately for readmission.
+
+📞 Contact for Readmission:
+WhatsApp: {LIBRARY_PHONE}
+Visit: {LIBRARY_ADDRESS}
+Email: {LIBRARY_EMAIL}
+
+We understand that circumstances can cause delays, and we're here to help you get back on track with your studies.
+
+💬 Quick Readmission:
+Simply reply to this message or call us at {LIBRARY_PHONE} to discuss readmission options and available seats.
+
+Thank you for being part of {LIBRARY_NAME}. We hope to welcome you back soon!
+
+Best regards,
+{LIBRARY_NAME} Team
+            """.strip()
+            
+            messages.append({
+                'name': subscription['student_name'],
+                'phone': subscription['mobile_number'],
+                'message': message
+            })
+        
+        return self.send_bulk_messages(messages)
+    
     def send_overdue_book_reminders(self, overdue_borrowings):
         """Send overdue book return reminders"""
         messages = []
