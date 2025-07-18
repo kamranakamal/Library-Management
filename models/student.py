@@ -68,10 +68,15 @@ class Student:
         return self.id
     
     def delete(self):
-        """Soft delete student (mark as inactive)"""
+        """Soft delete student (mark as inactive) and deactivate all subscriptions"""
         if not self.id:
             raise ValueError("Cannot delete student without ID")
         
+        # First deactivate all student's subscriptions
+        subscription_query = "UPDATE student_subscriptions SET is_active = 0 WHERE student_id = ?"
+        self.db_manager.execute_query(subscription_query, (self.id,))
+        
+        # Then mark student as inactive
         query = "UPDATE students SET is_active = 0 WHERE id = ?"
         self.db_manager.execute_query(query, (self.id,))
         self.is_active = False

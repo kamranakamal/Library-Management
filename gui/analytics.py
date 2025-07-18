@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from utils.database_manager import DatabaseOperations
 from utils.excel_exporter import ExcelExporter
+from config.database import DatabaseManager
 
 
 class AnalyticsFrame(ttk.Frame):
@@ -35,6 +36,9 @@ class AnalyticsFrame(ttk.Frame):
         
         # Reports tab
         self.create_reports_tab()
+        
+        # Available Seats tab
+        self.create_available_seats_tab()
     
     def create_overview_tab(self):
         """Create overview analytics tab"""
@@ -116,6 +120,16 @@ class AnalyticsFrame(ttk.Frame):
     
     def create_seat_occupancy_view(self, parent):
         """Create seat occupancy visualization"""
+        # Controls frame
+        controls_frame = ttk.Frame(parent)
+        controls_frame.pack(fill='x', pady=5)
+        
+        ttk.Button(controls_frame, text="Refresh Seat Map", 
+                  command=self.refresh_seat_map).pack(side='left', padx=5)
+        
+        ttk.Label(controls_frame, text="Real-time seat occupancy status", 
+                 font=('Arial', 9, 'italic')).pack(side='left', padx=20)
+        
         # Canvas for seat map
         canvas_frame = ttk.Frame(parent)
         canvas_frame.pack(fill='both', expand=True)
@@ -255,11 +269,63 @@ class AnalyticsFrame(ttk.Frame):
         self.expiring_tree.pack(side='left', fill='both', expand=True)
         expiring_scrollbar.pack(side='right', fill='y')
     
+    def create_available_seats_tab(self):
+        """Create available seats by timeslots tab"""
+        seats_frame = ttk.Frame(self.notebook)
+        self.notebook.add(seats_frame, text="Available Seats")
+        
+        # Controls frame
+        controls_frame = ttk.LabelFrame(seats_frame, text="View Options", padding=10)
+        controls_frame.pack(fill='x', padx=10, pady=10)
+        
+        # Timeslot selection
+        ttk.Label(controls_frame, text="Select Timeslot:").pack(side='left')
+        self.timeslot_var = tk.StringVar()
+        self.timeslot_combo = ttk.Combobox(controls_frame, textvariable=self.timeslot_var, 
+                                          state='readonly', width=30)
+        self.timeslot_combo.pack(side='left', padx=10)
+        
+        ttk.Button(controls_frame, text="Show Available Seats", 
+                  command=self.show_available_seats).pack(side='left', padx=10)
+        
+        ttk.Button(controls_frame, text="Show All Timeslots", 
+                  command=self.show_all_timeslots_availability).pack(side='left', padx=10)
+        
+        # Results frame
+        results_frame = ttk.LabelFrame(seats_frame, text="Available Seats", padding=10)
+        results_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # Available seats tree
+        seats_columns = ('Seat ID', 'Row', 'Gender Restriction', 'Status')
+        self.available_seats_tree = ttk.Treeview(results_frame, columns=seats_columns, show='headings', height=15)
+        
+        for col in seats_columns:
+            self.available_seats_tree.heading(col, text=col)
+            self.available_seats_tree.column(col, width=120)
+        
+        # Scrollbar for seats tree
+        seats_scrollbar = ttk.Scrollbar(results_frame, orient='vertical', command=self.available_seats_tree.yview)
+        self.available_seats_tree.configure(yscrollcommand=seats_scrollbar.set)
+        
+        self.available_seats_tree.pack(side='left', fill='both', expand=True)
+        seats_scrollbar.pack(side='right', fill='y')
+        
+        # Summary frame
+        summary_frame = ttk.LabelFrame(seats_frame, text="Summary", padding=10)
+        summary_frame.pack(fill='x', padx=10, pady=10)
+        
+        self.summary_var = tk.StringVar(value="Select a timeslot to view available seats")
+        ttk.Label(summary_frame, textvariable=self.summary_var, font=('Arial', 10)).pack()
+        
+        # Load timeslots
+        self.load_timeslots_for_availability()
+    
     def load_data(self):
         """Load all analytics data"""
         self.load_statistics()
         self.draw_seat_map()
         self.show_expiring_subscriptions()
+        self.load_timeslots_for_availability()
     
     def load_statistics(self):
         """Load current statistics"""
@@ -291,6 +357,9 @@ class AnalyticsFrame(ttk.Frame):
             from models.seat import Seat
             seats = Seat.get_all()
             
+            # Debug: Count occupied seats
+            occupied_count = 0
+            
             # Draw seats in a grid layout (10 rows, varying columns)
             seat_size = 30
             gap = 5
@@ -319,6 +388,10 @@ class AnalyticsFrame(ttk.Frame):
                 occupants = seat.get_current_occupants()
                 if occupants:
                     color = 'lightcoral'  # Occupied
+                    occupied_count += 1
+                    # Debug: Print occupied seats
+                    if seat.id in [2, 3]:  # Focus on problematic seats
+                        print(f"DEBUG: Seat {seat.id} shows {len(occupants)} occupants in analytics")
                 elif seat.gender_restriction == 'Female':
                     color = 'lightpink'  # Girls only
                 elif seat.gender_restriction == 'Male':
@@ -332,8 +405,12 @@ class AnalyticsFrame(ttk.Frame):
                 self.seat_canvas.create_text(x + seat_size/2, y + seat_size/2,
                                            text=str(seat.id), font=('Arial', 8))
             
+            print(f"DEBUG: Analytics seat map drawn with {occupied_count} occupied seats")
+            
         except Exception as e:
             print(f"Error drawing seat map: {e}")
+            import traceback
+            traceback.print_exc()
     
     def generate_chart(self):
         """Generate selected chart"""
@@ -551,3 +628,181 @@ class AnalyticsFrame(ttk.Frame):
     def refresh(self):
         """Refresh the interface"""
         self.load_data()
+        self.load_timeslots_for_availability()
+    
+    def refresh_seat_map(self):
+        """Refresh only the seat map visualization"""
+        try:
+            self.draw_seat_map()
+            print("Seat map refreshed successfully")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to refresh seat map: {str(e)}")
+    
+    def load_timeslots_for_availability(self):
+        """Load timeslots for the available seats view"""
+        try:
+            from models.timeslot import Timeslot
+            timeslots = Timeslot.get_all()
+            
+            # Populate timeslot combo
+            timeslot_names = [f"{ts.name} ({ts.start_time}-{ts.end_time})" for ts in timeslots]
+            self.timeslot_combo['values'] = timeslot_names
+            
+            # Store timeslots for reference
+            self.timeslots_data = {f"{ts.name} ({ts.start_time}-{ts.end_time})": ts for ts in timeslots}
+            
+        except Exception as e:
+            print(f"Error loading timeslots: {str(e)}")
+    
+    def show_available_seats(self):
+        """Show available seats for selected timeslot"""
+        try:
+            # Clear existing items
+            for item in self.available_seats_tree.get_children():
+                self.available_seats_tree.delete(item)
+            
+            selected_timeslot_name = self.timeslot_var.get()
+            if not selected_timeslot_name:
+                messagebox.showwarning("Warning", "Please select a timeslot")
+                return
+            
+            # Get selected timeslot
+            timeslot = self.timeslots_data.get(selected_timeslot_name)
+            if not timeslot:
+                messagebox.showerror("Error", "Invalid timeslot selected")
+                return
+            
+            # Get all seats
+            from models.seat import Seat
+            all_seats = Seat.get_all()
+            
+            available_count = 0
+            occupied_count = 0
+            male_available = 0
+            female_available = 0
+            any_available = 0
+            
+            for seat in all_seats:
+                # Check if seat has any conflicting subscriptions for this timeslot
+                is_available = self.is_seat_available_for_timeslot(seat, timeslot)
+                
+                if is_available:
+                    status = "Available"
+                    available_count += 1
+                    
+                    if seat.gender_restriction == 'Male':
+                        male_available += 1
+                    elif seat.gender_restriction == 'Female':
+                        female_available += 1
+                    else:
+                        any_available += 1
+                        
+                    # Insert available seat
+                    self.available_seats_tree.insert('', 'end', values=(
+                        seat.id,
+                        seat.row_number,
+                        seat.gender_restriction,
+                        status
+                    ), tags=('available',))
+                else:
+                    occupied_count += 1
+            
+            # Configure tag colors
+            self.available_seats_tree.tag_configure('available', background='lightgreen')
+            
+            # Update summary
+            summary_text = (f"Timeslot: {selected_timeslot_name}\n"
+                          f"Available Seats: {available_count} | Occupied: {occupied_count}\n"
+                          f"Available by Gender - Male: {male_available}, Female: {female_available}, Any: {any_available}")
+            self.summary_var.set(summary_text)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load available seats: {str(e)}")
+    
+    def show_all_timeslots_availability(self):
+        """Show availability summary for all timeslots"""
+        try:
+            # Clear existing items
+            for item in self.available_seats_tree.get_children():
+                self.available_seats_tree.delete(item)
+            
+            from models.timeslot import Timeslot
+            from models.seat import Seat
+            
+            timeslots = Timeslot.get_all()
+            all_seats = Seat.get_all()
+            total_seats = len(all_seats)
+            
+            # Change column headers for summary view
+            self.available_seats_tree.heading('Seat ID', text='Timeslot')
+            self.available_seats_tree.heading('Row', text='Time')
+            self.available_seats_tree.heading('Gender Restriction', text='Available Seats')
+            self.available_seats_tree.heading('Status', text='Occupancy Rate')
+            
+            total_available = 0
+            
+            for timeslot in timeslots:
+                available_count = 0
+                
+                # Count available seats for this timeslot
+                for seat in all_seats:
+                    if self.is_seat_available_for_timeslot(seat, timeslot):
+                        available_count += 1
+                
+                occupied_count = total_seats - available_count
+                occupancy_rate = (occupied_count / total_seats) * 100 if total_seats > 0 else 0
+                
+                # Insert timeslot summary
+                self.available_seats_tree.insert('', 'end', values=(
+                    timeslot.name,
+                    f"{timeslot.start_time}-{timeslot.end_time}",
+                    f"{available_count}/{total_seats}",
+                    f"{occupancy_rate:.1f}%"
+                ), tags=('summary',))
+                
+                total_available += available_count
+            
+            # Configure tag colors
+            self.available_seats_tree.tag_configure('summary', background='lightblue')
+            
+            # Update summary
+            avg_availability = (total_available / (len(timeslots) * total_seats)) * 100 if timeslots and total_seats > 0 else 0
+            summary_text = (f"All Timeslots Summary\n"
+                          f"Total Seats: {total_seats} | Average Availability: {avg_availability:.1f}%\n"
+                          f"Click 'Show Available Seats' after selecting a specific timeslot for detailed view")
+            self.summary_var.set(summary_text)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load timeslots summary: {str(e)}")
+    
+    def is_seat_available_for_timeslot(self, seat, timeslot):
+        """Check if a seat is available for a specific timeslot"""
+        try:
+            from datetime import date, timedelta
+            
+            # Check current date availability (we'll check for next 30 days as default)
+            start_date = date.today()
+            end_date = start_date + timedelta(days=30)
+            
+            # Get existing subscriptions for this seat that might conflict
+            db_manager = DatabaseManager()
+            query = '''
+                SELECT ss.*, t.start_time, t.end_time
+                FROM student_subscriptions ss
+                JOIN students s ON ss.student_id = s.id
+                JOIN timeslots t ON ss.timeslot_id = t.id
+                WHERE ss.seat_id = ? AND ss.is_active = 1 AND s.is_active = 1
+                AND ss.end_date >= date('now')
+            '''
+            existing_subs = db_manager.execute_query(query, (seat.id,))
+            
+            # Check for time conflicts with the target timeslot
+            for sub in existing_subs:
+                if timeslot.check_overlap(sub['start_time'], sub['end_time']):
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error checking seat availability: {str(e)}")
+            return False

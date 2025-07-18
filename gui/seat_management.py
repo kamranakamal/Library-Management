@@ -304,7 +304,7 @@ class SeatManagementFrame(ttk.Frame):
                 SELECT ss.*, s.name as student_name, s.is_active as student_active 
                 FROM student_subscriptions ss
                 JOIN students s ON ss.student_id = s.id
-                WHERE ss.seat_id = ? AND ss.is_active = 1
+                WHERE ss.seat_id = ? AND ss.is_active = 1 AND s.is_active = 1
             '''
             raw_subscriptions = db_manager.execute_query(query, (seat_id,))
             
@@ -314,13 +314,12 @@ class SeatManagementFrame(ttk.Frame):
             
             for row in raw_subscriptions:
                 end_date = date.fromisoformat(row['end_date']) if row['end_date'] else None
-                student_active = bool(row['student_active'])
                 
                 # A subscription is truly active if:
                 # 1. The subscription itself is marked active
-                # 2. The student is still active
+                # 2. The student is still active (already filtered in query)
                 # 3. The end date hasn't passed
-                if end_date and end_date >= today and student_active:
+                if end_date and end_date >= today:
                     current_subscriptions.append(row)
             
             return len(current_subscriptions) > 0
