@@ -227,11 +227,27 @@ The message includes readmission contact information and encourages them to retu
         self.results_text.pack(fill='both', expand=True)
     
     def log_message(self, message):
-        """Add message to log"""
-        self.log_text.config(state='normal')
-        self.log_text.insert('end', f"{message}\n")
-        self.log_text.see('end')
-        self.log_text.config(state='disabled')
+        """Add message to log - thread safe version"""
+        def update_log():
+            try:
+                # Check if widget still exists
+                if hasattr(self, 'log_text') and self.log_text.winfo_exists():
+                    from datetime import datetime
+                    timestamp = datetime.now().strftime('%H:%M:%S')
+                    self.log_text.config(state='normal')
+                    self.log_text.insert('end', f"[{timestamp}] {message}\n")
+                    self.log_text.see('end')
+                    self.log_text.config(state='disabled')
+            except Exception as e:
+                # Fallback to console logging if GUI fails
+                print(f"GUI Log Error: {e} - Message: {message}")
+        
+        # Schedule GUI update on main thread
+        try:
+            self.after(0, update_log)
+        except:
+            # If after() fails, just print to console
+            print(f"WhatsApp Log: {message}")
     
     def initialize_whatsapp(self):
         """Initialize WhatsApp Web"""

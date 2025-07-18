@@ -1,5 +1,52 @@
 # Library Management System - Changelog
 
+## Version 1.0.16 (2025-07-18) - Critical Threading and Display Fixes
+
+### Critical Bug Fixes
+- **FIXED**: WhatsApp automation threading error causing `TclError: invalid command name` crashes
+  - **Problem**: Background threads trying to access destroyed Tkinter widgets
+  - **Solution**: Implemented thread-safe GUI operations using `tkinter.after()` method
+  - **Enhanced**: Added proper widget validation and error handling for widget operations
+
+- **FIXED**: Student management timeslot display showing proper time information
+  - **Problem**: Timeslots only showing names without time ranges after debugging changes
+  - **Solution**: Restored full timeslot display format: "Morning Session (09:00 - 12:00)"
+  - **Cleaned**: Removed all debug print statements cluttering console output
+
+### Code Quality Improvements
+- **Logging System**: Replaced print statements with proper Python logging module
+- **Error Handling**: Enhanced with comprehensive try-catch blocks for GUI operations
+- **Thread Safety**: All GUI updates now properly scheduled on main thread
+- **Imports**: Added missing logging, os, and subprocess imports
+
+### Technical Details
+- **WhatsApp Window**: `log_message()` method now thread-safe with widget validation
+- **Student Management**: Subscription display properly formats timeslot with time ranges  
+- **Timeslot Model**: Restored proper is_active filtering after debugging
+- **Console Output**: Clean operation without debug spam
+
+## Version 1.0.15 (2025-07-18) - Timeslot Display Fix
+
+### Bug Fixes
+- **Student Subscription Timeslot Display Issue**: Fixed timeslot not displaying properly in student management
+  - **Problem**: Timeslot information not showing correctly in subscription list
+  - **Root Cause**: Timeslots marked as inactive were not being retrieved for display
+  - **Solution**: Temporarily removed is_active filter from Timeslot.get_by_id for debugging
+  - **Simplified**: Timeslot display to show name only initially to isolate the issue
+  - **Added**: Debug logging to identify timeslot retrieval issues
+
+### Technical Details
+- **File Modified**: `gui/student_management.py`
+- **Change**: Enhanced `load_student_subscriptions()` method with better error handling
+- **Added**: Debug logging for timeslot data retrieval and tree insertion
+- **Improved**: Safe string formatting for timeslot display with multiple fallback levels
+- **Enhanced**: Exception handling with traceback logging for debugging
+
+### Error Handling Enhancements
+- **Timeslot Data Validation**: Added checks for None/empty start_time and end_time
+- **Graceful Degradation**: Falls back to timeslot name only if times unavailable
+- **Debug Information**: Console logging to help diagnose timeslot loading issues
+
 ## Version 1.0.14 (2025-07-17) - Overnight Timeslot Support
 
 ### Bug Fixes

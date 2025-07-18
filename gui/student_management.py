@@ -4,6 +4,9 @@ Student management interface
 
 import tkinter as tk
 from tkinter import ttk, messagebox
+import logging
+import os
+import subprocess
 from datetime import date, datetime, timedelta
 from models.student import Student
 from models.subscription import Subscription
@@ -504,16 +507,31 @@ class StudentManagementFrame(ttk.Frame):
                 if not sub.is_active:
                     continue
                     
-                # Get related data
-                seat = Seat.get_by_id(sub.seat_id)
-                timeslot = Timeslot.get_by_id(sub.timeslot_id)
+                # Get related data with error handling
+                try:
+                    seat = Seat.get_by_id(sub.seat_id)
+                    timeslot = Timeslot.get_by_id(sub.timeslot_id)
+                    
+                    # Format timeslot display with time information
+                    if timeslot:
+                        timeslot_display = f"{timeslot.name} ({timeslot.start_time} - {timeslot.end_time})"
+                    else:
+                        timeslot_display = "N/A"
+                    
+                except Exception as e:
+                    # Log error without cluttering console
+                    import logging
+                    logging.error(f"Failed to load data for subscription {sub.receipt_number}: {e}")
+                    seat = None
+                    timeslot = None
+                    timeslot_display = "Error Loading"
                 
                 status = "Active" if sub.is_active and not sub.is_expired() else "Expired"
                 
                 self.subscription_tree.insert('', 'end', values=(
                     sub.receipt_number,
                     f"Seat {seat.id}" if seat else "N/A",
-                    f"{timeslot.name} ({timeslot.start_time} - {timeslot.end_time})" if timeslot else "N/A",
+                    timeslot_display,
                     sub.start_date,
                     sub.end_date,
                     f"Rs. {sub.amount_paid}",
@@ -522,6 +540,7 @@ class StudentManagementFrame(ttk.Frame):
         
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load subscriptions: {str(e)}")
+            logging.error(f"Failed to load subscriptions for student {student_id}: {e}")
     
     def save_student(self):
         """Save student information (create new or update existing)"""
@@ -1261,12 +1280,12 @@ class SubscriptionRenewalDialog(tk.Toplevel):
                 )
                 
                 if success:
-                    print(f"Renewal receipt generated: {result}")
+                    logging.info(f"Renewal receipt generated: {result}")
                 else:
-                    print(f"Receipt generation failed: {result}")
+                    logging.error(f"Receipt generation failed: {result}")
                     
             except Exception as e:
-                print(f"Receipt generation failed: {e}")
+                logging.error(f"Receipt generation failed: {e}")
             
             self.renewed = True
             messagebox.showinfo("Success", f"Subscription renewed successfully!\nNew receipt: {new_subscription.receipt_number}")
