@@ -20,8 +20,33 @@ class ReceiptGenerator:
         if not os.path.exists(RECEIPTS_DIR):
             os.makedirs(RECEIPTS_DIR)
     
-    def generate_subscription_receipt(self, subscription_data):
-        """Generate PDF receipt for subscription"""
+    def generate_subscription_receipt(self, subscription, student, seat, timeslot, filename=None):
+        """Generate PDF receipt for subscription - Compatible interface"""
+        try:
+            # Convert objects to data dictionary format
+            subscription_data = {
+                'receipt_number': subscription.receipt_number,
+                'student_name': student.name,
+                'father_name': student.father_name,
+                'mobile_number': student.mobile_number,
+                'aadhaar_number': student.aadhaar_number,
+                'seat_id': seat.id,  # Changed from seat.seat_number to seat.id
+                'timeslot_name': timeslot.name,
+                'timeslot_time': f"{timeslot.start_time} - {timeslot.end_time}",  # Added timeslot time
+                'start_date': subscription.start_date,
+                'end_date': subscription.end_date,
+                'locker_number': student.locker_number,
+                'amount_paid': subscription.amount_paid,
+                'payment_date': subscription.created_at.split()[0] if hasattr(subscription, 'created_at') else datetime.now().strftime('%Y-%m-%d')
+            }
+            
+            return self._generate_subscription_receipt_from_data(subscription_data, filename)
+            
+        except Exception as e:
+            return False, f"Error generating receipt: {str(e)}"
+    
+    def _generate_subscription_receipt_from_data(self, subscription_data, custom_filename=None):
+        """Generate PDF receipt for subscription from data dictionary"""
         try:
             # Create PDF
             pdf = FPDF()
@@ -70,6 +95,7 @@ class ReceiptGenerator:
             
             pdf.cell(0, 8, f"Seat Number: {subscription_data['seat_id']}", 0, 1)
             pdf.cell(0, 8, f"Timeslot: {subscription_data['timeslot_name']}", 0, 1)
+            pdf.cell(0, 8, f"Time: {subscription_data['timeslot_time']}", 0, 1)  # Added timeslot time
             pdf.cell(0, 8, f"Duration: {subscription_data['start_date']} to {subscription_data['end_date']}", 0, 1)
             
             if subscription_data.get('locker_number'):
@@ -110,7 +136,7 @@ class ReceiptGenerator:
             pdf.cell(0, 8, f'Generated on: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
             
             # Save PDF
-            filename = f"receipt_{subscription_data['receipt_number']}.pdf"
+            filename = custom_filename or f"receipt_{subscription_data['receipt_number']}.pdf"
             filepath = os.path.join(RECEIPTS_DIR, filename)
             pdf.output(filepath)
             
@@ -119,8 +145,32 @@ class ReceiptGenerator:
         except Exception as e:
             return False, f"Error generating receipt: {str(e)}"
     
-    def generate_renewal_receipt(self, renewal_data):
-        """Generate PDF receipt for subscription renewal"""
+    def generate_renewal_receipt(self, new_subscription, student, seat, timeslot, filename=None):
+        """Generate PDF receipt for subscription renewal - Compatible interface"""
+        try:
+            # Convert objects to data dictionary format
+            renewal_data = {
+                'receipt_number': new_subscription.receipt_number,
+                'previous_receipt_number': 'N/A',  # This would need to be passed if available
+                'student_name': student.name,
+                'mobile_number': student.mobile_number,
+                'seat_id': seat.id,  # Changed from seat.seat_number to seat.id
+                'timeslot_name': timeslot.name,
+                'timeslot_time': f"{timeslot.start_time} - {timeslot.end_time}",  # Added timeslot time
+                'previous_start': 'N/A',  # These would need to be calculated
+                'previous_end': 'N/A',
+                'new_start': new_subscription.start_date,
+                'new_end': new_subscription.end_date,
+                'amount_paid': new_subscription.amount_paid
+            }
+            
+            return self._generate_renewal_receipt_from_data(renewal_data, filename)
+            
+        except Exception as e:
+            return False, f"Error generating renewal receipt: {str(e)}"
+    
+    def _generate_renewal_receipt_from_data(self, renewal_data, custom_filename=None):
+        """Generate PDF receipt for subscription renewal from data dictionary"""
         try:
             # Create PDF
             pdf = FPDF()
@@ -157,6 +207,8 @@ class ReceiptGenerator:
             pdf.cell(0, 8, f"Name: {renewal_data['student_name']}", 0, 1)
             pdf.cell(0, 8, f"Mobile: {renewal_data['mobile_number']}", 0, 1)
             pdf.cell(0, 8, f"Seat Number: {renewal_data['seat_id']}", 0, 1)
+            pdf.cell(0, 8, f"Timeslot: {renewal_data['timeslot_name']}", 0, 1)
+            pdf.cell(0, 8, f"Time: {renewal_data['timeslot_time']}", 0, 1)
             pdf.ln(5)
             
             # Renewal details
@@ -175,7 +227,7 @@ class ReceiptGenerator:
             pdf.cell(0, 8, f'Generated on: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
             
             # Save PDF
-            filename = f"renewal_{renewal_data['receipt_number']}.pdf"
+            filename = custom_filename or f"renewal_{renewal_data['receipt_number']}.pdf"
             filepath = os.path.join(RECEIPTS_DIR, filename)
             pdf.output(filepath)
             
@@ -234,3 +286,7 @@ class ReceiptGenerator:
             
         except Exception as e:
             return False, f"Error generating monthly report: {str(e)}"
+
+
+# Alias for backward compatibility
+PDFGenerator = ReceiptGenerator

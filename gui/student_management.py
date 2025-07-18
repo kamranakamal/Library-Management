@@ -349,7 +349,10 @@ class StudentManagementFrame(ttk.Frame):
         
         for col in sub_columns:
             self.subscription_tree.heading(col, text=col)
-            self.subscription_tree.column(col, width=80)
+            if col == 'Timeslot':
+                self.subscription_tree.column(col, width=150)  # Wider for time info
+            else:
+                self.subscription_tree.column(col, width=80)
         
         self.subscription_tree.grid(row=0, column=0, columnspan=4, sticky='nsew')
         
@@ -510,7 +513,7 @@ class StudentManagementFrame(ttk.Frame):
                 self.subscription_tree.insert('', 'end', values=(
                     sub.receipt_number,
                     f"Seat {seat.id}" if seat else "N/A",
-                    timeslot.name if timeslot else "N/A",
+                    f"{timeslot.name} ({timeslot.start_time} - {timeslot.end_time})" if timeslot else "N/A",
                     sub.start_date,
                     sub.end_date,
                     f"Rs. {sub.amount_paid}",
@@ -970,12 +973,25 @@ class StudentManagementFrame(ttk.Frame):
             pdf_generator = PDFGenerator()
             filename = f"receipt_{subscription.receipt_number}.pdf"
             
-            pdf_generator.generate_subscription_receipt(
+            success, result = pdf_generator.generate_subscription_receipt(
                 subscription, student, seat, timeslot, filename
             )
             
-            messagebox.showinfo("Success", f"Receipt saved as {filename}")
-            
+            if success:
+                messagebox.showinfo("Success", f"Receipt saved as {filename}")
+                # Open the PDF file
+                import subprocess
+                import os
+                try:
+                    if os.name == 'nt':  # Windows
+                        os.startfile(result)
+                    elif os.name == 'posix':  # Linux/Mac
+                        subprocess.run(['xdg-open', result], check=True)
+                except Exception as e:
+                    print(f"Could not open PDF: {e}")
+            else:
+                messagebox.showerror("Error", f"Failed to generate receipt: {result}")
+                
         except Exception as e:
             messagebox.showerror("Error", f"Failed to generate receipt: {str(e)}")
 
@@ -1240,9 +1256,15 @@ class SubscriptionRenewalDialog(tk.Toplevel):
                 pdf_generator = PDFGenerator()
                 filename = f"renewal_receipt_{new_subscription.receipt_number}.pdf"
                 
-                pdf_generator.generate_renewal_receipt(
+                success, result = pdf_generator.generate_renewal_receipt(
                     new_subscription, student, seat, timeslot, filename
                 )
+                
+                if success:
+                    print(f"Renewal receipt generated: {result}")
+                else:
+                    print(f"Receipt generation failed: {result}")
+                    
             except Exception as e:
                 print(f"Receipt generation failed: {e}")
             
