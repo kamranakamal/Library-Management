@@ -228,7 +228,7 @@ Book Details:
 - Title: {borrowing['book_title']}
 - Author: {borrowing['book_author']}
 - Due Date: {borrowing['due_date']}
-- Fine Amount: ₹{borrowing['fine_amount']}
+- Fine Amount: Rs. {borrowing['fine_amount']}
 
 Please return the book as soon as possible to avoid additional charges.
 
@@ -262,7 +262,7 @@ Your subscription has been successfully confirmed!
 - Seat Number: {subscription_data['seat_id']}
 - Timeslot: {subscription_data['timeslot_name']}
 - Duration: {subscription_data['start_date']} to {subscription_data['end_date']}
-- Amount Paid: ₹{subscription_data['amount_paid']}
+- Amount Paid: Rs. {subscription_data['amount_paid']}
 
 🏢 {LIBRARY_NAME}
 📍 {LIBRARY_ADDRESS}

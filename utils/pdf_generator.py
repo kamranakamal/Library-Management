@@ -82,7 +82,7 @@ class ReceiptGenerator:
             pdf.cell(0, 8, 'Payment Details:', 0, 1)
             pdf.set_font('Arial', '', 12)
             
-            pdf.cell(0, 8, f"Amount Paid: {DEFAULT_CURRENCY}{subscription_data['amount_paid']}", 0, 1)
+            pdf.cell(0, 8, f"Amount Paid: {DEFAULT_CURRENCY} {subscription_data['amount_paid']}", 0, 1)
             pdf.cell(0, 8, f"Payment Date: {subscription_data['payment_date']}", 0, 1)
             pdf.ln(10)
             

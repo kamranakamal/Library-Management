@@ -70,7 +70,7 @@ class AnalyticsFrame(ttk.Frame):
         self.unassigned_students_var = tk.StringVar(value="0")
         self.total_books_var = tk.StringVar(value="0")
         self.active_borrowings_var = tk.StringVar(value="0")
-        self.monthly_revenue_var = tk.StringVar(value="₹0")
+        self.monthly_revenue_var = tk.StringVar(value="Rs. 0")
         
         # Create stat boxes
         row = 0
@@ -277,7 +277,7 @@ class AnalyticsFrame(ttk.Frame):
             
             # Get current month's revenue
             monthly_revenue = self.db_ops.get_current_month_revenue()
-            self.monthly_revenue_var.set(f"₹{monthly_revenue:,.0f}")
+            self.monthly_revenue_var.set(f"Rs. {monthly_revenue:,.0f}")
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load statistics: {str(e)}")
@@ -414,23 +414,23 @@ class AnalyticsFrame(ttk.Frame):
             month_name = datetime(selected_year, selected_month, 1).strftime("%B %Y")
             ax.set_title(f'Revenue by Timeslot - {month_name}', fontsize=14, fontweight='bold')
             ax.set_xlabel('Timeslots', fontsize=12)
-            ax.set_ylabel('Revenue (₹)', fontsize=12)
+            ax.set_ylabel('Revenue (Rs.)', fontsize=12)
             
             # Format y-axis to show rupee values
-            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'₹{x:,.0f}'))
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'Rs. {x:,.0f}'))
             
             # Add value labels on bars
             for bar, revenue in zip(bars, revenues):
                 height = bar.get_height()
                 ax.text(bar.get_x() + bar.get_width()/2., height + max(revenues)*0.01,
-                       f'₹{revenue:,.0f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+                       f'Rs. {revenue:,.0f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
             
             # Rotate x-axis labels for better readability
             plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
             
             # Add total revenue annotation
             total_revenue = sum(revenues)
-            ax.text(0.02, 0.98, f'Total: ₹{total_revenue:,.0f}', 
+            ax.text(0.02, 0.98, f'Total: Rs. {total_revenue:,.0f}', 
                    transform=ax.transAxes, fontsize=12, fontweight='bold',
                    bbox=dict(boxstyle='round', facecolor='yellow', alpha=0.7),
                    verticalalignment='top')

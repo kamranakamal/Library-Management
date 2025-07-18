@@ -332,7 +332,7 @@ class BookManagementFrame(ttk.Frame):
                     borrowing['borrow_date'],
                     borrowing['due_date'],
                     borrowing['return_date'] or "N/A",
-                    f"₹{borrowing['fine_amount']}" if borrowing['fine_amount'] else "₹0",
+                    f"Rs. {borrowing['fine_amount']}" if borrowing['fine_amount'] else "Rs. 0",
                     status
                 ))
         except Exception as e:

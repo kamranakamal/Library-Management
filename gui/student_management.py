@@ -297,11 +297,11 @@ class StudentManagementFrame(ttk.Frame):
         """Load timeslots into combo box"""
         try:
             timeslots = Timeslot.get_all()
-            timeslot_values = [f"{ts.name} ({ts.start_time}-{ts.end_time}) - ₹{ts.price}" for ts in timeslots]
+            timeslot_values = [f"{ts.name} ({ts.start_time}-{ts.end_time}) - Rs. {ts.price}" for ts in timeslots]
             self.timeslot_combo['values'] = timeslot_values
             
             # Store timeslot objects for reference
-            self.timeslots = {f"{ts.name} ({ts.start_time}-{ts.end_time}) - ₹{ts.price}": ts for ts in timeslots}
+            self.timeslots = {f"{ts.name} ({ts.start_time}-{ts.end_time}) - Rs. {ts.price}": ts for ts in timeslots}
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load timeslots: {str(e)}")
     
@@ -405,7 +405,7 @@ class StudentManagementFrame(ttk.Frame):
                     timeslot.name if timeslot else "N/A",
                     sub.start_date,
                     sub.end_date,
-                    f"₹{sub.amount_paid}",
+                    f"Rs. {sub.amount_paid}",
                     status
                 ))
         
@@ -1023,7 +1023,7 @@ class SubscriptionRenewalDialog(tk.Toplevel):
         
         ttk.Label(info_frame, text=f"Receipt: {self.subscription.receipt_number}").pack(anchor='w')
         ttk.Label(info_frame, text=f"Current End Date: {self.subscription.end_date}").pack(anchor='w')
-        ttk.Label(info_frame, text=f"Current Amount: ₹{self.subscription.amount_paid}").pack(anchor='w')
+        ttk.Label(info_frame, text=f"Current Amount: Rs. {self.subscription.amount_paid}").pack(anchor='w')
         
         # Renewal form
         renewal_frame = ttk.LabelFrame(main_frame, text="Renewal Details", padding=10)

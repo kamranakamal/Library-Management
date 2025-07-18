@@ -101,7 +101,7 @@ class TimeslotManagementFrame(ttk.Frame):
                   command=lambda: self._set_preset("22:00", "06:00")).grid(row=preset_row, column=2, padx=2, pady=2)
         
         # Price
-        ttk.Label(form_frame, text="Price (₹) *:").grid(row=row, column=0, sticky='w', pady=2)
+        ttk.Label(form_frame, text="Price (Rs.) *:").grid(row=row, column=0, sticky='w', pady=2)
         self.price_var = tk.StringVar()
         ttk.Entry(form_frame, textvariable=self.price_var, width=25).grid(row=row, column=1, pady=2)
         row += 1
@@ -236,7 +236,7 @@ class TimeslotManagementFrame(ttk.Frame):
                     timeslot.name,
                     start_time,
                     end_time,
-                    f"₹{timeslot.price}",
+                    f"Rs. {timeslot.price}",
                     f"{timeslot.duration_months} months",
                     "Yes" if timeslot.lockers_available else "No",
                     f"{occupancy_rate:.1f}%"

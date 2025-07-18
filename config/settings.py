@@ -32,7 +32,11 @@ EXPORTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "
 
 # Timeslot Configuration
 MIN_DURATION_MONTHS = 1
-DEFAULT_CURRENCY = "₹"
+DEFAULT_CURRENCY = "Rs."
+
+# Currency Configuration
+CURRENCY_SYMBOL = "Rs."  # Using Rs. instead of ₹ for better font compatibility
+CURRENCY_FORMAT = "{symbol} {amount:,.2f}"  # Format: Rs. 1,234.56
 
 # WhatsApp Configuration
 WHATSAPP_WEB_URL = "https://web.whatsapp.com"
