@@ -137,13 +137,17 @@ class WhatsAppAutomation:
             print(f"Found Chrome at: {chrome_binary}")
             
             chrome_options = Options()
-            chrome_options.binary_location = chrome_binary
+            # For Flatpak Chrome, we need to set the binary path correctly
+            if chrome_binary.startswith('/var/lib/flatpak/'):
+                chrome_options.binary_location = chrome_binary
+            
             chrome_options.add_argument("--user-data-dir=./whatsapp_session")
             chrome_options.add_argument("--disable-blink-features=AutomationControlled")
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
             chrome_options.add_argument("--disable-web-security")
             chrome_options.add_argument("--allow-running-insecure-content")
+            chrome_options.add_argument("--remote-debugging-port=9222")
             chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
             chrome_options.add_experimental_option('useAutomationExtension', False)
             
@@ -157,6 +161,7 @@ class WhatsAppAutomation:
             
             # Use webdriver-manager to handle ChromeDriver
             try:
+                # Simple approach - just get latest compatible driver
                 service = webdriver.chrome.service.Service(ChromeDriverManager().install())
                 self.driver = webdriver.Chrome(service=service, options=chrome_options)
                 
@@ -165,8 +170,54 @@ class WhatsAppAutomation:
                 
                 return True, f"Driver initialized successfully using Chrome at: {chrome_binary}"
                 
+                # Execute script to avoid detection
+                self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+                
+                return True, f"Driver initialized successfully using Chrome at: {chrome_binary}"
+                
             except Exception as e:
-                return False, f"Failed to setup ChromeDriver: {str(e)}\n\nTry installing ChromeDriver manually or updating Chrome browser."
+                # For Flatpak Chrome, don't try system ChromeDriver as it's incompatible
+                if chrome_binary.startswith('/var/lib/flatpak/'):
+                    return False, (f"ChromeDriver initialization failed with Flatpak Chrome.\n"
+                                 f"Error: {str(e)}\n\n"
+                                 f"Possible solutions:\n"
+                                 f"1. Install Chrome from official .rpm package instead of Flatpak\n"
+                                 f"2. Or try: pip install --upgrade webdriver-manager selenium\n"
+                                 f"3. Install system ChromeDriver: sudo dnf install chromedriver\n"
+                                 f"   (may require non-Flatpak Chrome)")
+                
+                # Fallback: try system chromedriver for non-Flatpak Chrome
+                error_msg = f"Failed to setup ChromeDriver: {str(e)}"
+                
+                # Try to find system chromedriver
+                system_drivers = [
+                    '/usr/bin/chromedriver',
+                    '/usr/local/bin/chromedriver',
+                    '/snap/bin/chromedriver'
+                ]
+                
+                for driver_path in system_drivers:
+                    if os.path.exists(driver_path):
+                        try:
+                            print(f"Trying system ChromeDriver at: {driver_path}")
+                            service = webdriver.chrome.service.Service(driver_path)
+                            self.driver = webdriver.Chrome(service=service, options=chrome_options)
+                            
+                            # Execute script to avoid detection
+                            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+                            
+                            return True, f"Driver initialized using system ChromeDriver at: {driver_path}"
+                        except Exception as sys_e:
+                            print(f"System ChromeDriver failed: {sys_e}")
+                            continue
+                
+                # If all fails, provide comprehensive error message
+                return False, (f"{error_msg}\n\n"
+                             f"Possible solutions:\n"
+                             f"1. Update Chrome browser to latest version\n"
+                             f"2. Install system ChromeDriver: sudo dnf install chromedriver\n"
+                             f"3. Or try: pip install --upgrade webdriver-manager selenium\n"
+                             f"4. Manual download from: https://chromedriver.chromium.org/")
         
         except Exception as e:
             return False, f"Failed to initialize driver: {str(e)}\n\n{self.get_chrome_install_instructions()}"
