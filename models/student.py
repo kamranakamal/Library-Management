@@ -55,13 +55,13 @@ class Student:
             UPDATE students SET
                 name = ?, father_name = ?, gender = ?, mobile_number = ?,
                 aadhaar_number = ?, email = ?, photo_path = ?, locker_number = ?,
-                updated_at = CURRENT_TIMESTAMP
+                registration_date = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         '''
         params = (
             self.name, self.father_name, self.gender, self.mobile_number,
             self.aadhaar_number, self.email, self.photo_path,
-            self.locker_number, self.id
+            self.locker_number, self.registration_date, self.id
         )
         
         self.db_manager.execute_query(query, params)

@@ -29,6 +29,111 @@ class StudentManagementFrame(ttk.Frame):
         """Set registration date to today"""
         self.reg_date_var.set(str(date.today()))
     
+    def pick_registration_date(self):
+        """Open date picker for registration date"""
+        self.open_date_picker(self.reg_date_var, "Select Registration Date")
+    
+    def open_date_picker(self, date_var, title="Select Date"):
+        """Open a simple date picker dialog"""
+        from tkinter import simpledialog
+        
+        # Create date picker dialog
+        date_dialog = tk.Toplevel(self)
+        date_dialog.title(title)
+        date_dialog.geometry("300x250")
+        date_dialog.resizable(False, False)
+        
+        # Make dialog modal
+        date_dialog.transient(self)
+        date_dialog.grab_set()
+        
+        # Center the dialog
+        date_dialog.update_idletasks()
+        x = (date_dialog.winfo_screenwidth() // 2) - (300 // 2)
+        y = (date_dialog.winfo_screenheight() // 2) - (250 // 2)
+        date_dialog.geometry(f"300x250+{x}+{y}")
+        
+        # Current date or selected date
+        try:
+            current_date = datetime.strptime(date_var.get(), '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            current_date = date.today()
+        
+        # Date picker frame
+        picker_frame = ttk.LabelFrame(date_dialog, text="Select Date", padding=10)
+        picker_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # Year selection
+        year_frame = ttk.Frame(picker_frame)
+        year_frame.pack(fill='x', pady=5)
+        ttk.Label(year_frame, text="Year:").pack(side='left')
+        year_var = tk.StringVar(value=str(current_date.year))
+        year_spin = tk.Spinbox(year_frame, from_=2000, to=2050, textvariable=year_var, width=10)
+        year_spin.pack(side='right')
+        
+        # Month selection
+        month_frame = ttk.Frame(picker_frame)
+        month_frame.pack(fill='x', pady=5)
+        ttk.Label(month_frame, text="Month:").pack(side='left')
+        months = ['January', 'February', 'March', 'April', 'May', 'June',
+                 'July', 'August', 'September', 'October', 'November', 'December']
+        month_var = tk.StringVar(value=months[current_date.month - 1])
+        month_combo = ttk.Combobox(month_frame, textvariable=month_var, values=months, state='readonly', width=12)
+        month_combo.pack(side='right')
+        
+        # Day selection
+        day_frame = ttk.Frame(picker_frame)
+        day_frame.pack(fill='x', pady=5)
+        ttk.Label(day_frame, text="Day:").pack(side='left')
+        day_var = tk.StringVar(value=str(current_date.day))
+        day_spin = tk.Spinbox(day_frame, from_=1, to=31, textvariable=day_var, width=10)
+        day_spin.pack(side='right')
+        
+        # Preview
+        preview_frame = ttk.Frame(picker_frame)
+        preview_frame.pack(fill='x', pady=10)
+        ttk.Label(preview_frame, text="Selected Date:").pack(side='left')
+        preview_var = tk.StringVar()
+        preview_label = ttk.Label(preview_frame, textvariable=preview_var, font=('Arial', 10, 'bold'))
+        preview_label.pack(side='right')
+        
+        def update_preview(*args):
+            try:
+                selected_month = months.index(month_var.get()) + 1
+                selected_date = date(int(year_var.get()), selected_month, int(day_var.get()))
+                preview_var.set(selected_date.strftime('%Y-%m-%d'))
+            except (ValueError, IndexError):
+                preview_var.set("Invalid Date")
+        
+        # Bind preview updates
+        year_var.trace('w', update_preview)
+        month_var.trace('w', update_preview)
+        day_var.trace('w', update_preview)
+        
+        # Initial preview
+        update_preview()
+        
+        # Buttons
+        button_frame = ttk.Frame(picker_frame)
+        button_frame.pack(fill='x', pady=10)
+        
+        def apply_date():
+            try:
+                selected_month = months.index(month_var.get()) + 1
+                selected_date = date(int(year_var.get()), selected_month, int(day_var.get()))
+                date_var.set(selected_date.strftime('%Y-%m-%d'))
+                date_dialog.destroy()
+            except (ValueError, IndexError):
+                messagebox.showerror("Invalid Date", "Please select a valid date.")
+        
+        def cancel_date():
+            date_dialog.destroy()
+        
+        ttk.Button(button_frame, text="Apply", command=apply_date).pack(side='right', padx=5)
+        ttk.Button(button_frame, text="Cancel", command=cancel_date).pack(side='right', padx=5)
+        ttk.Button(button_frame, text="Today", 
+                  command=lambda: [date_var.set(str(date.today())), date_dialog.destroy()]).pack(side='left')
+    
     def setup_ui(self):
         """Setup user interface"""
         # Create main paned window
@@ -104,8 +209,11 @@ class StudentManagementFrame(ttk.Frame):
         reg_date_entry = ttk.Entry(reg_date_frame, textvariable=self.reg_date_var, width=25)
         reg_date_entry.grid(row=0, column=0, sticky='ew')
         
+        # Date picker buttons
         ttk.Button(reg_date_frame, text="Today", 
                   command=self.set_today_date, width=8).grid(row=0, column=1, padx=(5,0))
+        ttk.Button(reg_date_frame, text="Pick Date", 
+                  command=self.pick_registration_date, width=10).grid(row=0, column=2, padx=(5,0))
         
         reg_date_frame.columnconfigure(0, weight=1)
         
