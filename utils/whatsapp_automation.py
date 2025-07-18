@@ -141,37 +141,48 @@ class WhatsAppAutomation:
             if chrome_binary.startswith('/var/lib/flatpak/'):
                 chrome_options.binary_location = chrome_binary
             
+            # User data directory for persistent session
             chrome_options.add_argument("--user-data-dir=./whatsapp_session")
+            
+            # Anti-detection options
             chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            chrome_options.add_experimental_option('useAutomationExtension', False)
+            
+            # Stability and security options
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
             chrome_options.add_argument("--disable-web-security")
             chrome_options.add_argument("--allow-running-insecure-content")
-            chrome_options.add_argument("--remote-debugging-port=9222")
-            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            chrome_options.add_experimental_option('useAutomationExtension', False)
             
-            # Additional options for better compatibility
+            # Performance options
             chrome_options.add_argument("--disable-extensions")
             chrome_options.add_argument("--disable-plugins-discovery")
             chrome_options.add_argument("--disable-default-apps")
+            chrome_options.add_argument("--disable-background-timer-throttling")
+            chrome_options.add_argument("--disable-backgrounding-occluded-windows")
+            chrome_options.add_argument("--disable-renderer-backgrounding")
+            
+            # Window and display options
+            chrome_options.add_argument("--window-size=1200,800")
+            chrome_options.add_argument("--start-maximized")
             
             if headless:
                 chrome_options.add_argument("--headless")
+            else:
+                # Ensure window is visible when not headless
+                chrome_options.add_argument("--disable-background-mode")
             
             # Use webdriver-manager to handle ChromeDriver
             try:
-                # Simple approach - just get latest compatible driver
+                print("Initializing ChromeDriver...")
                 service = webdriver.chrome.service.Service(ChromeDriverManager().install())
+                print("Creating Chrome browser instance...")
                 self.driver = webdriver.Chrome(service=service, options=chrome_options)
                 
                 # Execute script to avoid detection
                 self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-                
-                return True, f"Driver initialized successfully using Chrome at: {chrome_binary}"
-                
-                # Execute script to avoid detection
-                self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+                print("ChromeDriver initialized successfully!")
                 
                 return True, f"Driver initialized successfully using Chrome at: {chrome_binary}"
                 
@@ -187,6 +198,8 @@ class WhatsAppAutomation:
                                  f"   (may require non-Flatpak Chrome)")
                 
                 # Fallback: try system chromedriver for non-Flatpak Chrome
+                print(f"WebDriver Manager failed: {str(e)}")
+                print("Trying system ChromeDriver as fallback...")
                 error_msg = f"Failed to setup ChromeDriver: {str(e)}"
                 
                 # Try to find system chromedriver
@@ -205,6 +218,7 @@ class WhatsAppAutomation:
                             
                             # Execute script to avoid detection
                             self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+                            print("System ChromeDriver initialized successfully!")
                             
                             return True, f"Driver initialized using system ChromeDriver at: {driver_path}"
                         except Exception as sys_e:
@@ -221,95 +235,85 @@ class WhatsAppAutomation:
         
         except Exception as e:
             return False, f"Failed to initialize driver: {str(e)}\n\n{self.get_chrome_install_instructions()}"
-    
-    def test_chrome_installation(self):
-        """Test Chrome installation and provide diagnostic information"""
-        system = platform.system()
-        chrome_binary = self.find_chrome_executable()
-        
-        result = {
-            'system': system,
-            'chrome_found': chrome_binary is not None,
-            'chrome_path': chrome_binary,
-            'diagnostics': []
-        }
-        
-        if chrome_binary:
-            result['diagnostics'].append(f"✓ Chrome found at: {chrome_binary}")
-            
-            # Test if Chrome can be executed
-            try:
-                if system == "Windows":
-                    test_cmd = [chrome_binary, '--version']
-                else:
-                    test_cmd = [chrome_binary, '--version']
-                
-                proc_result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
-                if proc_result.returncode == 0:
-                    version = proc_result.stdout.strip()
-                    result['diagnostics'].append(f"✓ Chrome executable works: {version}")
-                    result['chrome_version'] = version
-                else:
-                    result['diagnostics'].append(f"✗ Chrome executable failed: {proc_result.stderr}")
-            except Exception as e:
-                result['diagnostics'].append(f"✗ Failed to test Chrome executable: {str(e)}")
-        else:
-            result['diagnostics'].append("✗ Chrome not found")
-            result['diagnostics'].append(f"Installation instructions:\n{self.get_chrome_install_instructions()}")
-        
-        # Test ChromeDriver
-        try:
-            from webdriver_manager.chrome import ChromeDriverManager
-            driver_path = ChromeDriverManager().install()
-            result['diagnostics'].append(f"✓ ChromeDriver available at: {driver_path}")
-            result['chromedriver_found'] = True
-        except Exception as e:
-            result['diagnostics'].append(f"✗ ChromeDriver issue: {str(e)}")
-            result['chromedriver_found'] = False
-        
-        return result
 
     def login_to_whatsapp(self):
         """Login to WhatsApp Web"""
         try:
             if not self.driver:
+                print("Driver not initialized. Initializing...")
                 success, message = self.initialize_driver()
                 if not success:
                     return False, message
             
+            print("Opening WhatsApp Web...")
             self.driver.get(WHATSAPP_WEB_URL)
+            print(f"Navigated to: {WHATSAPP_WEB_URL}")
             
-            # Wait for QR code or main page to load
+            # Wait for page to load
+            print("Waiting for WhatsApp Web to load...")
             wait = WebDriverWait(self.driver, 60)
             
             try:
                 # Check if already logged in
+                print("Checking if already logged in...")
                 wait.until(EC.presence_of_element_located((By.XPATH, '//div[@data-testid="chat-list"]')))
                 self.is_logged_in = True
+                print("Already logged in to WhatsApp Web!")
                 return True, "Already logged in to WhatsApp Web"
             
             except TimeoutException:
                 # QR code is present, need to scan
+                print("QR code should be visible. Waiting for QR code element...")
                 try:
-                    wait.until(EC.presence_of_element_located((By.XPATH, '//canvas')))
+                    # Wait for QR code canvas or container
+                    qr_element = wait.until(EC.any_of(
+                        EC.presence_of_element_located((By.XPATH, '//canvas')),
+                        EC.presence_of_element_located((By.XPATH, '//div[contains(@data-testid, "qr")]')),
+                        EC.presence_of_element_located((By.XPATH, '//div[contains(text(), "scan")]'))
+                    ))
+                    print("QR code is now visible on screen")
                     return False, "Please scan the QR code to login to WhatsApp Web"
                 except TimeoutException:
-                    return False, "Failed to load WhatsApp Web page"
+                    print("Failed to load WhatsApp Web page or QR code")
+                    # Take a screenshot for debugging
+                    try:
+                        self.driver.save_screenshot("whatsapp_error.png")
+                        print("Screenshot saved as whatsapp_error.png")
+                    except:
+                        pass
+                    return False, "Failed to load WhatsApp Web page. Please check your internet connection."
         
         except Exception as e:
+            print(f"Login error: {str(e)}")
             return False, f"Login failed: {str(e)}"
     
     def wait_for_login(self, timeout=120):
         """Wait for user to complete QR code scan"""
         try:
+            print(f"Waiting for login completion (timeout: {timeout} seconds)...")
             wait = WebDriverWait(self.driver, timeout)
-            wait.until(EC.presence_of_element_located((By.XPATH, '//div[@data-testid="chat-list"]')))
-            self.is_logged_in = True
-            return True, "Successfully logged in to WhatsApp Web"
-        
-        except TimeoutException:
+            
+            # Show progress every 10 seconds
+            for i in range(0, timeout, 10):
+                try:
+                    # Try to find chat list (indicates successful login)
+                    wait_short = WebDriverWait(self.driver, 10)
+                    wait_short.until(EC.presence_of_element_located((By.XPATH, '//div[@data-testid="chat-list"]')))
+                    self.is_logged_in = True
+                    print("Login successful!")
+                    return True, "Successfully logged in to WhatsApp Web"
+                except TimeoutException:
+                    remaining = timeout - i - 10
+                    if remaining > 0:
+                        print(f"Still waiting for QR code scan... ({remaining} seconds remaining)")
+                    continue
+            
+            # Final timeout
+            print("Login timeout reached")
             return False, "Login timeout. Please try again."
+            
         except Exception as e:
+            print(f"Login error: {str(e)}")
             return False, f"Login error: {str(e)}"
     
     def send_message(self, phone_number, message):
@@ -318,22 +322,27 @@ class WhatsAppAutomation:
             if not self.is_logged_in:
                 return False, "Not logged in to WhatsApp Web"
             
+            print(f"Sending message to {phone_number}...")
+            
             # Clean phone number (remove +, spaces, etc.)
             clean_number = re.sub(r'[^\d]', '', phone_number)
             
             # Open chat using WhatsApp Web URL
             chat_url = f"https://web.whatsapp.com/send?phone={clean_number}"
+            print(f"Opening chat: {chat_url}")
             self.driver.get(chat_url)
             
             # Wait for chat to load
             wait = WebDriverWait(self.driver, 30)
             
             try:
+                print("Waiting for message input box...")
                 # Wait for the message input box
                 message_box = wait.until(
                     EC.element_to_be_clickable((By.XPATH, '//div[@data-testid="conversation-compose-box-input"]'))
                 )
                 
+                print("Sending message...")
                 # Click on message box and send message
                 message_box.click()
                 message_box.send_keys(message)
@@ -341,6 +350,7 @@ class WhatsAppAutomation:
                 
                 # Add delay to avoid being detected as bot
                 time.sleep(WHATSAPP_DELAY)
+                print("Message sent successfully!")
                 
                 return True, "Message sent successfully"
             
@@ -348,11 +358,14 @@ class WhatsAppAutomation:
                 # Try alternative method - check if number is invalid
                 try:
                     self.driver.find_element(By.XPATH, '//*[contains(text(), "Phone number shared via url is invalid")]')
+                    print(f"Invalid phone number detected: {phone_number}")
                     return False, f"Invalid phone number: {phone_number}"
                 except Exception:
+                    print(f"Failed to load chat for {phone_number}")
                     return False, f"Failed to send message to {phone_number}"
         
         except Exception as e:
+            print(f"Error sending message: {str(e)}")
             return False, f"Error sending message: {str(e)}"
     
     def send_bulk_messages(self, contacts_messages):
