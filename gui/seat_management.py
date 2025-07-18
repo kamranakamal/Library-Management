@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from models.seat import Seat
 from models.subscription import Subscription
+from config.database import DatabaseManager
 
 
 class SeatManagementFrame(ttk.Frame):
@@ -89,6 +90,13 @@ class SeatManagementFrame(ttk.Frame):
         ttk.Button(button_frame, text="View Occupancy", command=self.view_seat_occupancy).pack(side='left', padx=5)
         ttk.Button(button_frame, text="Clear Selection", command=self.clear_selection).pack(side='left', padx=5)
         
+        # Diagnostic buttons
+        diagnostic_frame = ttk.Frame(info_frame)
+        diagnostic_frame.grid(row=5, column=0, columnspan=2, pady=5, sticky='ew')
+        
+        ttk.Button(diagnostic_frame, text="Diagnose Seat", command=self.diagnose_seat_occupancy).pack(side='left', padx=5)
+        ttk.Button(diagnostic_frame, text="Cleanup Expired", command=self.cleanup_expired_subscriptions).pack(side='left', padx=5)
+        
         # Initially disable all buttons
         self.save_btn.config(state='disabled')
         self.update_btn.config(state='disabled')
@@ -132,6 +140,7 @@ class SeatManagementFrame(ttk.Frame):
         
         ttk.Button(control_frame, text="Refresh Layout", command=self.load_data).pack(side='left', padx=5)
         ttk.Button(control_frame, text="Reset All Seats", command=self.reset_all_seats).pack(side='left', padx=5)
+        ttk.Button(control_frame, text="Fix Occupancy Issues", command=self.cleanup_expired_subscriptions).pack(side='left', padx=5)
         
         # Legend
         legend_frame = ttk.Frame(control_frame)
@@ -287,9 +296,37 @@ class SeatManagementFrame(ttk.Frame):
     def is_seat_occupied(self, seat_id):
         """Check if seat is currently occupied"""
         try:
-            subscriptions = Subscription.get_by_seat_id(seat_id, active_only=True)
-            return len(subscriptions) > 0
-        except:
+            from datetime import date
+            
+            # Get all subscriptions for this seat that are marked as active in the database
+            db_manager = DatabaseManager()
+            query = '''
+                SELECT ss.*, s.name as student_name, s.is_active as student_active 
+                FROM student_subscriptions ss
+                JOIN students s ON ss.student_id = s.id
+                WHERE ss.seat_id = ? AND ss.is_active = 1
+            '''
+            raw_subscriptions = db_manager.execute_query(query, (seat_id,))
+            
+            # Filter subscriptions to only include those that are truly current
+            current_subscriptions = []
+            today = date.today()
+            
+            for row in raw_subscriptions:
+                end_date = date.fromisoformat(row['end_date']) if row['end_date'] else None
+                student_active = bool(row['student_active'])
+                
+                # A subscription is truly active if:
+                # 1. The subscription itself is marked active
+                # 2. The student is still active
+                # 3. The end date hasn't passed
+                if end_date and end_date >= today and student_active:
+                    current_subscriptions.append(row)
+            
+            return len(current_subscriptions) > 0
+            
+        except Exception as e:
+            print(f"Error checking seat occupancy for seat {seat_id}: {str(e)}")
             return False
     
     def select_seat(self, seat):
@@ -425,6 +462,9 @@ class SeatManagementFrame(ttk.Frame):
             self.occupancy_tree.delete(item)
         
         try:
+            from datetime import date
+            today = date.today()
+            
             # Get all subscriptions for this seat (active and expired)
             subscriptions = Subscription.get_by_seat_id(seat_id, active_only=False)
             
@@ -436,16 +476,46 @@ class SeatManagementFrame(ttk.Frame):
                 student = Student.get_by_id(sub.student_id)
                 timeslot = Timeslot.get_by_id(sub.timeslot_id)
                 
-                if student and timeslot and student.is_active:
-                    status = "Active" if sub.is_active and not sub.is_expired() else "Expired"
+                if student and timeslot:
+                    # Determine detailed status
+                    status_parts = []
                     
-                    self.occupancy_tree.insert('', 'end', values=(
+                    if not student.is_active:
+                        status_parts.append("Student Inactive")
+                    
+                    if not sub.is_active:
+                        status_parts.append("Sub Deactivated")
+                    
+                    if sub.is_expired():
+                        status_parts.append("Expired")
+                    
+                    if not status_parts:
+                        status_parts.append("Active")
+                    
+                    status = " | ".join(status_parts)
+                    
+                    # Color coding based on status
+                    if "Active" in status and len(status_parts) == 1:
+                        # True active subscription
+                        tag = "active"
+                    elif "Expired" in status or "Deactivated" in status:
+                        # Problematic subscription
+                        tag = "problem"
+                    else:
+                        tag = "inactive"
+                    
+                    item = self.occupancy_tree.insert('', 'end', values=(
                         timeslot.name,
                         student.name,
                         sub.start_date,
                         sub.end_date,
                         status
-                    ))
+                    ), tags=(tag,))
+            
+            # Configure tag colors
+            self.occupancy_tree.tag_configure("active", background="lightgreen")
+            self.occupancy_tree.tag_configure("problem", background="lightcoral")
+            self.occupancy_tree.tag_configure("inactive", background="lightgray")
         
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load seat occupancy: {str(e)}")
@@ -616,3 +686,137 @@ class SeatManagementFrame(ttk.Frame):
     def refresh(self):
         """Refresh the seat management interface"""
         self.load_data()
+    
+    def cleanup_expired_subscriptions(self):
+        """Clean up expired subscriptions that might be causing false 'occupied' status"""
+        try:
+            from datetime import date
+            
+            db_manager = DatabaseManager()
+            
+            # Find subscriptions that are marked as active but have expired
+            query = '''
+                SELECT ss.id, ss.seat_id, ss.end_date, s.name as student_name
+                FROM student_subscriptions ss
+                JOIN students s ON ss.student_id = s.id
+                WHERE ss.is_active = 1 AND ss.end_date < date('now')
+            '''
+            expired_active = db_manager.execute_query(query)
+            
+            if expired_active:
+                expired_count = len(expired_active)
+                
+                response = messagebox.askyesno("Cleanup Expired Subscriptions", 
+                    f"Found {expired_count} subscriptions that are marked active but have expired.\n\n"
+                    f"This might be causing seats to show as occupied when they shouldn't be.\n\n"
+                    f"Would you like to mark these expired subscriptions as inactive?")
+                
+                if response:
+                    # Mark expired subscriptions as inactive
+                    cleanup_query = "UPDATE student_subscriptions SET is_active = 0 WHERE is_active = 1 AND end_date < date('now')"
+                    db_manager.execute_query(cleanup_query)
+                    
+                    messagebox.showinfo("Success", 
+                        f"Marked {expired_count} expired subscriptions as inactive.\n\n"
+                        f"Seats should now show correct availability status.")
+                    
+                    # Refresh the display
+                    self.load_data()
+            else:
+                messagebox.showinfo("No Issues Found", 
+                    "No expired subscriptions found that are still marked as active.")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to cleanup expired subscriptions: {str(e)}")
+    
+    def diagnose_seat_occupancy(self, seat_id=None):
+        """Diagnose seat occupancy issues for debugging"""
+        if not seat_id:
+            seat_id = self.seat_id_var.get()
+            
+        if not seat_id:
+            messagebox.showwarning("Warning", "Please select a seat to diagnose")
+            return
+            
+        try:
+            from datetime import date
+            
+            db_manager = DatabaseManager()
+            
+            # Get detailed information about this seat's subscriptions
+            query = '''
+                SELECT ss.*, s.name as student_name, s.is_active as student_active, t.name as timeslot_name
+                FROM student_subscriptions ss
+                JOIN students s ON ss.student_id = s.id
+                JOIN timeslots t ON ss.timeslot_id = t.id
+                WHERE ss.seat_id = ?
+                ORDER BY ss.end_date DESC
+            '''
+            all_subscriptions = db_manager.execute_query(query, (seat_id,))
+            
+            if not all_subscriptions:
+                messagebox.showinfo("Seat Diagnosis", f"Seat {seat_id}: No subscriptions found.")
+                return
+            
+            # Analyze each subscription
+            today = date.today()
+            diagnosis_text = f"Seat {seat_id} Diagnosis:\n\n"
+            
+            active_count = 0
+            for sub in all_subscriptions:
+                end_date = date.fromisoformat(sub['end_date']) if sub['end_date'] else None
+                is_active = bool(sub['is_active'])
+                student_active = bool(sub['student_active'])
+                
+                status_parts = []
+                if is_active:
+                    status_parts.append("DB Active")
+                else:
+                    status_parts.append("DB Inactive")
+                    
+                if end_date:
+                    if end_date >= today:
+                        status_parts.append("Not Expired")
+                        if is_active and student_active:
+                            active_count += 1
+                    else:
+                        status_parts.append("EXPIRED")
+                        
+                if student_active:
+                    status_parts.append("Student Active")
+                else:
+                    status_parts.append("Student Inactive")
+                
+                diagnosis_text += f"• {sub['student_name']} ({sub['timeslot_name']})\n"
+                diagnosis_text += f"  End Date: {sub['end_date']} | Status: {' | '.join(status_parts)}\n\n"
+            
+            diagnosis_text += f"Current Status: {'OCCUPIED' if active_count > 0 else 'AVAILABLE'}\n"
+            diagnosis_text += f"Active Subscriptions: {active_count}"
+            
+            # Show diagnosis in a scrollable dialog
+            diagnosis_window = tk.Toplevel()
+            diagnosis_window.title(f"Seat {seat_id} Diagnosis")
+            diagnosis_window.geometry("600x400")
+            
+            text_frame = ttk.Frame(diagnosis_window)
+            text_frame.pack(fill='both', expand=True, padx=10, pady=10)
+            
+            text_widget = tk.Text(text_frame, wrap='word', font=('Courier', 10))
+            scrollbar = ttk.Scrollbar(text_frame, orient='vertical', command=text_widget.yview)
+            text_widget.configure(yscrollcommand=scrollbar.set)
+            
+            text_widget.pack(side='left', fill='both', expand=True)
+            scrollbar.pack(side='right', fill='y')
+            
+            text_widget.insert('1.0', diagnosis_text)
+            text_widget.config(state='disabled')
+            
+            # Add cleanup button if needed
+            if any(sub['is_active'] and date.fromisoformat(sub['end_date']) < today for sub in all_subscriptions):
+                ttk.Button(diagnosis_window, text="Cleanup Expired Subscriptions", 
+                          command=lambda: [diagnosis_window.destroy(), self.cleanup_expired_subscriptions()]).pack(pady=5)
+            
+            ttk.Button(diagnosis_window, text="Close", command=diagnosis_window.destroy).pack(pady=5)
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to diagnose seat: {str(e)}")
