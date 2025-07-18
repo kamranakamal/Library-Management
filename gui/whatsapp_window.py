@@ -2,6 +2,7 @@
 WhatsApp automation window
 """
 
+import os
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 import threading
@@ -72,6 +73,13 @@ Note: Keep this window open while using WhatsApp automation.
         ttk.Button(button_frame, text="Initialize WhatsApp", command=self.initialize_whatsapp).pack(side='left', padx=5)
         ttk.Button(button_frame, text="Check Status", command=self.check_status).pack(side='left', padx=5)
         ttk.Button(button_frame, text="Close WhatsApp", command=self.close_whatsapp).pack(side='left', padx=5)
+        
+        # Diagnostic frame
+        diagnostic_frame = ttk.Frame(login_frame)
+        diagnostic_frame.pack(pady=10)
+        
+        ttk.Button(diagnostic_frame, text="Test Chrome Installation", command=self.test_chrome).pack(side='left', padx=5)
+        ttk.Button(diagnostic_frame, text="Clear Session Data", command=self.clear_session).pack(side='left', padx=5)
         
         # Log display
         log_frame = ttk.LabelFrame(login_frame, text="Log", padding=10)
@@ -342,6 +350,94 @@ Note: Keep this window open while using WhatsApp automation.
         # Confirm before sending
         if messagebox.askyesno("Confirm", "Send custom messages to all recipients?"):
             threading.Thread(target=send_thread, daemon=True).start()
+    
+    def test_chrome(self):
+        """Test Chrome installation and show diagnostic information"""
+        try:
+            self.log_message("Testing Chrome installation...")
+            
+            # Test Chrome installation
+            result = self.whatsapp.test_chrome_installation()
+            
+            # Create diagnostic window
+            diag_window = tk.Toplevel(self.window)
+            diag_window.title("Chrome Installation Diagnostic")
+            diag_window.geometry("600x500")
+            diag_window.grab_set()
+            
+            # Header
+            header_frame = ttk.Frame(diag_window)
+            header_frame.pack(fill='x', padx=10, pady=10)
+            
+            system_info = f"System: {result['system']}"
+            chrome_status = "✓ Chrome Found" if result['chrome_found'] else "✗ Chrome Not Found"
+            status_color = 'green' if result['chrome_found'] else 'red'
+            
+            ttk.Label(header_frame, text=system_info, font=('Arial', 12, 'bold')).pack(anchor='w')
+            status_label = tk.Label(header_frame, text=chrome_status, font=('Arial', 12, 'bold'), fg=status_color)
+            status_label.pack(anchor='w')
+            
+            # Diagnostics text
+            text_frame = ttk.Frame(diag_window)
+            text_frame.pack(fill='both', expand=True, padx=10, pady=5)
+            
+            text_widget = scrolledtext.ScrolledText(text_frame, wrap='word', font=('Courier', 10))
+            text_widget.pack(fill='both', expand=True)
+            
+            # Add diagnostic information
+            diagnostic_text = "\n".join(result['diagnostics'])
+            text_widget.insert('1.0', diagnostic_text)
+            text_widget.config(state='disabled')
+            
+            # Buttons
+            button_frame = ttk.Frame(diag_window)
+            button_frame.pack(fill='x', padx=10, pady=10)
+            
+            if not result['chrome_found']:
+                ttk.Button(button_frame, text="Open Chrome Download Page", 
+                          command=lambda: self.open_chrome_download()).pack(side='left', padx=5)
+            
+            ttk.Button(button_frame, text="Close", command=diag_window.destroy).pack(side='right', padx=5)
+            
+            # Log the result
+            if result['chrome_found']:
+                self.log_message(f"✓ Chrome diagnostic completed - Chrome found at {result['chrome_path']}")
+            else:
+                self.log_message("✗ Chrome diagnostic completed - Chrome not found")
+                
+        except Exception as e:
+            self.log_message(f"Error during Chrome diagnostic: {str(e)}")
+            messagebox.showerror("Error", f"Failed to run Chrome diagnostic: {str(e)}")
+    
+    def open_chrome_download(self):
+        """Open Chrome download page"""
+        import webbrowser
+        webbrowser.open("https://www.google.com/chrome/")
+    
+    def clear_session(self):
+        """Clear WhatsApp session data"""
+        try:
+            import shutil
+            
+            if messagebox.askyesno("Confirm", 
+                "Clear WhatsApp session data? You'll need to scan QR code again."):
+                
+                # Close existing driver first
+                if self.whatsapp.driver:
+                    self.whatsapp.close_driver()
+                
+                # Remove session directory
+                session_dir = "./whatsapp_session"
+                if os.path.exists(session_dir):
+                    shutil.rmtree(session_dir)
+                    self.log_message("Session data cleared successfully")
+                    self.status_var.set("Session cleared - need to login again")
+                else:
+                    self.log_message("No session data found to clear")
+                    
+        except Exception as e:
+            self.log_message(f"Error clearing session: {str(e)}")
+            messagebox.showerror("Error", f"Failed to clear session: {str(e)}")
     
     def __del__(self):
         """Cleanup when window is closed"""

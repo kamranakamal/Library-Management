@@ -5,6 +5,8 @@ WhatsApp automation utilities
 import time
 import re
 import os
+import platform
+import subprocess
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -24,26 +26,115 @@ class WhatsAppAutomation:
         self.driver = None
         self.is_logged_in = False
     
-    def initialize_driver(self, headless=False):
-        """Initialize Chrome WebDriver"""
-        try:
-            # Check if Chrome is installed
+    def find_chrome_executable(self):
+        """Find Chrome executable on different operating systems"""
+        system = platform.system()
+        
+        if system == "Windows":
+            # Windows Chrome paths
+            chrome_paths = [
+                os.path.expandvars(r"%PROGRAMFILES%\Google\Chrome\Application\chrome.exe"),
+                os.path.expandvars(r"%PROGRAMFILES(X86)%\Google\Chrome\Application\chrome.exe"),
+                os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+                os.path.expandvars(r"%USERPROFILE%\AppData\Local\Google\Chrome\Application\chrome.exe"),
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            ]
+        elif system == "Darwin":  # macOS
+            chrome_paths = [
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            ]
+        else:  # Linux (including Fedora)
             chrome_paths = [
                 '/usr/bin/google-chrome',
                 '/usr/bin/google-chrome-stable',
                 '/usr/bin/chromium-browser',
                 '/usr/bin/chromium',
-                '/snap/bin/chromium'
+                '/snap/bin/chromium',
+                '/usr/bin/chrome',
+                '/opt/google/chrome/chrome',
+                '/usr/local/bin/chrome',
+                '/usr/local/bin/google-chrome',
+                '/usr/bin/google-chrome-beta',
+                '/usr/bin/google-chrome-unstable',
+                '/var/lib/flatpak/app/com.google.Chrome/current/active/export/bin/com.google.Chrome',
+                '/home/.local/share/flatpak/app/com.google.Chrome/current/active/export/bin/com.google.Chrome'
             ]
+        
+        # Check each path
+        for path in chrome_paths:
+            if os.path.exists(path) and os.access(path, os.X_OK):
+                return path
+        
+        # Try to find Chrome using 'which' command on Unix-like systems
+        if system != "Windows":
+            try:
+                result = subprocess.run(['which', 'google-chrome'], 
+                                      capture_output=True, text=True, timeout=5)
+                if result.returncode == 0 and result.stdout.strip():
+                    chrome_path = result.stdout.strip()
+                    if os.path.exists(chrome_path):
+                        return chrome_path
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                pass
             
-            chrome_binary = None
-            for path in chrome_paths:
-                if os.path.exists(path):
-                    chrome_binary = path
-                    break
+            # Try chromium as fallback
+            try:
+                result = subprocess.run(['which', 'chromium'], 
+                                      capture_output=True, text=True, timeout=5)
+                if result.returncode == 0 and result.stdout.strip():
+                    chrome_path = result.stdout.strip()
+                    if os.path.exists(chrome_path):
+                        return chrome_path
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                pass
+        
+        return None
+    
+    def get_chrome_install_instructions(self):
+        """Get Chrome installation instructions for current OS"""
+        system = platform.system()
+        
+        if system == "Windows":
+            return ("Please install Google Chrome from: https://www.google.com/chrome/\n"
+                   "Or install via winget: winget install Google.Chrome")
+        elif system == "Darwin":
+            return ("Please install Google Chrome from: https://www.google.com/chrome/\n"
+                   "Or install via Homebrew: brew install --cask google-chrome")
+        else:  # Linux
+            distro_info = ""
+            try:
+                # Try to detect Linux distribution
+                with open('/etc/os-release', 'r') as f:
+                    os_release = f.read()
+                if 'fedora' in os_release.lower():
+                    distro_info = ("Fedora: sudo dnf install google-chrome-stable\n"
+                                 "Or: sudo dnf install chromium")
+                elif 'ubuntu' in os_release.lower() or 'debian' in os_release.lower():
+                    distro_info = ("Ubuntu/Debian: sudo apt update && sudo apt install google-chrome-stable\n"
+                                 "Or: sudo apt install chromium-browser")
+                elif 'arch' in os_release.lower():
+                    distro_info = ("Arch: sudo pacman -S google-chrome\n"
+                                 "Or: sudo pacman -S chromium")
+            except:
+                pass
+            
+            return (f"Please install Google Chrome or Chromium browser.\n"
+                   f"{distro_info}\n"
+                   f"Universal: Download from https://www.google.com/chrome/")
+
+    def initialize_driver(self, headless=False):
+        """Initialize Chrome WebDriver"""
+        try:
+            # Find Chrome executable
+            chrome_binary = self.find_chrome_executable()
             
             if not chrome_binary:
-                return False, "Chrome browser not found. Please install Google Chrome or Chromium."
+                install_instructions = self.get_chrome_install_instructions()
+                return False, f"Chrome browser not found.\n\n{install_instructions}"
+            
+            print(f"Found Chrome at: {chrome_binary}")
             
             chrome_options = Options()
             chrome_options.binary_location = chrome_binary
@@ -51,8 +142,15 @@ class WhatsAppAutomation:
             chrome_options.add_argument("--disable-blink-features=AutomationControlled")
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--disable-web-security")
+            chrome_options.add_argument("--allow-running-insecure-content")
             chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
             chrome_options.add_experimental_option('useAutomationExtension', False)
+            
+            # Additional options for better compatibility
+            chrome_options.add_argument("--disable-extensions")
+            chrome_options.add_argument("--disable-plugins-discovery")
+            chrome_options.add_argument("--disable-default-apps")
             
             if headless:
                 chrome_options.add_argument("--headless")
@@ -61,17 +159,65 @@ class WhatsAppAutomation:
             try:
                 service = webdriver.chrome.service.Service(ChromeDriverManager().install())
                 self.driver = webdriver.Chrome(service=service, options=chrome_options)
+                
+                # Execute script to avoid detection
+                self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+                
+                return True, f"Driver initialized successfully using Chrome at: {chrome_binary}"
+                
             except Exception as e:
-                return False, f"Failed to setup ChromeDriver: {str(e)}. Please install Google Chrome."
-            
-            # Execute script to avoid detection
-            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-            
-            return True, "Driver initialized successfully"
+                return False, f"Failed to setup ChromeDriver: {str(e)}\n\nTry installing ChromeDriver manually or updating Chrome browser."
         
         except Exception as e:
-            return False, f"Failed to initialize driver: {str(e)}. Make sure Chrome browser is installed."
+            return False, f"Failed to initialize driver: {str(e)}\n\n{self.get_chrome_install_instructions()}"
     
+    def test_chrome_installation(self):
+        """Test Chrome installation and provide diagnostic information"""
+        system = platform.system()
+        chrome_binary = self.find_chrome_executable()
+        
+        result = {
+            'system': system,
+            'chrome_found': chrome_binary is not None,
+            'chrome_path': chrome_binary,
+            'diagnostics': []
+        }
+        
+        if chrome_binary:
+            result['diagnostics'].append(f"✓ Chrome found at: {chrome_binary}")
+            
+            # Test if Chrome can be executed
+            try:
+                if system == "Windows":
+                    test_cmd = [chrome_binary, '--version']
+                else:
+                    test_cmd = [chrome_binary, '--version']
+                
+                proc_result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
+                if proc_result.returncode == 0:
+                    version = proc_result.stdout.strip()
+                    result['diagnostics'].append(f"✓ Chrome executable works: {version}")
+                    result['chrome_version'] = version
+                else:
+                    result['diagnostics'].append(f"✗ Chrome executable failed: {proc_result.stderr}")
+            except Exception as e:
+                result['diagnostics'].append(f"✗ Failed to test Chrome executable: {str(e)}")
+        else:
+            result['diagnostics'].append("✗ Chrome not found")
+            result['diagnostics'].append(f"Installation instructions:\n{self.get_chrome_install_instructions()}")
+        
+        # Test ChromeDriver
+        try:
+            from webdriver_manager.chrome import ChromeDriverManager
+            driver_path = ChromeDriverManager().install()
+            result['diagnostics'].append(f"✓ ChromeDriver available at: {driver_path}")
+            result['chromedriver_found'] = True
+        except Exception as e:
+            result['diagnostics'].append(f"✗ ChromeDriver issue: {str(e)}")
+            result['chromedriver_found'] = False
+        
+        return result
+
     def login_to_whatsapp(self):
         """Login to WhatsApp Web"""
         try:

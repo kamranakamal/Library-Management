@@ -70,6 +70,10 @@
 - SQLite3 (included with Python)
 - Chrome/Chromium browser (for WhatsApp automation)
 
+> **🪟 Windows Users**: Need Chrome? Quick install: `winget install Google.Chrome`  
+> **🐧 Fedora Users**: Need Chrome? Quick install: `sudo dnf install google-chrome-stable`  
+> **📖 Full Chrome Setup Guide**: See detailed instructions [below](#-chrome--chromedriver-setup-for-windows)
+
 ### ⚡ Installation
 
 1. **Clone or download the project**
@@ -100,6 +104,226 @@
    ```bash
    python start_application.py
    ```
+
+---
+
+## 🌐 Chrome & ChromeDriver Setup for Windows
+
+### 📋 **Prerequisites for WhatsApp Automation**
+
+The WhatsApp automation feature requires Google Chrome and ChromeDriver to function properly. Follow these step-by-step instructions for Windows installation:
+
+### 🔧 **Method 1: Using Windows Package Manager (Recommended)**
+
+#### **Step 1: Install Google Chrome**
+1. **Open Command Prompt or PowerShell as Administrator**
+   - Press `Win + X` and select "Windows PowerShell (Admin)" or "Command Prompt (Admin)"
+
+2. **Install Chrome using winget**
+   ```cmd
+   winget install Google.Chrome
+   ```
+   
+   **Alternative using Chocolatey** (if you have Chocolatey installed):
+   ```cmd
+   choco install googlechrome
+   ```
+
+#### **Step 2: Verify Chrome Installation**
+```cmd
+# Check if Chrome is installed and get version
+"C:\Program Files\Google\Chrome\Application\chrome.exe" --version
+```
+
+Expected output: `Google Chrome 119.x.x.xxxx` (or similar)
+
+### 🔧 **Method 2: Manual Installation**
+
+#### **Step 1: Download and Install Chrome**
+1. **Download Chrome**
+   - Go to [https://www.google.com/chrome/](https://www.google.com/chrome/)
+   - Click "Download Chrome"
+   - Run the downloaded installer (`ChromeSetup.exe`)
+
+2. **Follow Installation Wizard**
+   - Accept the license agreement
+   - Choose installation options
+   - Wait for installation to complete
+
+#### **Step 2: Verify Installation Paths**
+Chrome will be installed in one of these locations:
+```
+# System-wide installation:
+C:\Program Files\Google\Chrome\Application\chrome.exe
+
+# User-specific installation:
+C:\Users\[USERNAME]\AppData\Local\Google\Chrome\Application\chrome.exe
+```
+
+### 🔧 **ChromeDriver Setup (Automatic)**
+
+**Good News!** 🎉 Our application automatically handles ChromeDriver installation:
+
+1. **Automatic Download**: The app downloads the correct ChromeDriver version
+2. **Version Matching**: Automatically matches your Chrome version
+3. **Path Management**: Handles all path configurations
+4. **Updates**: Automatically updates when Chrome updates
+
+### 🧪 **Testing Your Installation**
+
+#### **Step 1: Test Chrome Detection**
+1. **Launch the Library Management Application**
+   ```cmd
+   python start_application.py
+   ```
+
+2. **Navigate to WhatsApp Automation**
+   - Click on the "WhatsApp Automation" tab
+
+3. **Test Chrome Installation**
+   - Click the "Test Chrome Installation" button
+   - The app will show a diagnostic window with:
+     - ✅ Chrome detection status
+     - 📍 Chrome executable path
+     - 🔢 Chrome version information
+     - 🚗 ChromeDriver compatibility
+
+#### **Step 2: Test WhatsApp Web Connection**
+1. **Initialize WhatsApp**
+   - Click "Initialize WhatsApp" button
+   - Chrome should open automatically
+   - WhatsApp Web should load
+
+2. **QR Code Login**
+   - Scan the QR code with your phone's WhatsApp
+   - Verify successful connection
+
+### 🛠️ **Troubleshooting Common Issues**
+
+#### **❌ "Chrome not found" Error**
+
+**Solution 1: Check Installation Path**
+```cmd
+# Verify Chrome is installed
+dir "C:\Program Files\Google\Chrome\Application\"
+dir "C:\Users\%USERNAME%\AppData\Local\Google\Chrome\Application\"
+```
+
+**Solution 2: Add Chrome to PATH**
+1. Open System Properties (`Win + R` → `sysdm.cpl`)
+2. Click "Environment Variables"
+3. Edit "Path" variable
+4. Add Chrome installation directory:
+   ```
+   C:\Program Files\Google\Chrome\Application
+   ```
+
+**Solution 3: Reinstall Chrome**
+```cmd
+# Uninstall and reinstall
+winget uninstall Google.Chrome
+winget install Google.Chrome
+```
+
+#### **❌ ChromeDriver Compatibility Issues**
+
+**Solution 1: Clear ChromeDriver Cache**
+1. Delete ChromeDriver cache:
+   ```cmd
+   rmdir /s "%USERPROFILE%\.wdm"
+   ```
+2. Restart the application
+
+**Solution 2: Manual ChromeDriver Update**
+1. Check Chrome version:
+   ```cmd
+   chrome --version
+   ```
+2. Download matching ChromeDriver from [ChromeDriver Downloads](https://chromedriver.chromium.org/downloads)
+3. Place in application directory
+
+#### **❌ WhatsApp Web Not Loading**
+
+**Solution 1: Check Internet Connection**
+- Ensure stable internet connection
+- Try accessing [web.whatsapp.com](https://web.whatsapp.com) manually
+
+**Solution 2: Clear Chrome Data**
+- Click "Clear Session Data" in the app
+- Or manually clear Chrome data:
+  ```cmd
+  rmdir /s "%USERPROFILE%\AppData\Local\Google\Chrome\User Data\WhatsApp_Session"
+  ```
+
+**Solution 3: Disable Antivirus/Firewall Temporarily**
+- Some security software blocks automated browsers
+- Add Chrome and Python to antivirus exceptions
+
+### 📱 **Alternative Browser Support**
+
+If Chrome doesn't work, the app also supports:
+
+#### **Microsoft Edge**
+```cmd
+winget install Microsoft.Edge
+```
+
+#### **Chromium**
+```cmd
+winget install Chromium.Chromium
+```
+
+#### **Firefox** (Limited Support)
+```cmd
+winget install Mozilla.Firefox
+```
+
+### 🔍 **Advanced Configuration**
+
+#### **Custom Chrome Path**
+If Chrome is installed in a non-standard location:
+
+1. **Edit Application Settings**
+   - Modify `config/settings.py`
+   - Add custom Chrome path:
+   ```python
+   CHROME_EXECUTABLE_PATH = r"C:\Custom\Path\To\chrome.exe"
+   ```
+
+#### **Proxy Configuration**
+For networks with proxy:
+```python
+# In config/settings.py
+CHROME_OPTIONS = [
+    "--proxy-server=proxy.company.com:8080",
+    "--proxy-auth=username:password"
+]
+```
+
+### 📚 **Additional Resources**
+
+- **Chrome Downloads**: [https://www.google.com/chrome/](https://www.google.com/chrome/)
+- **ChromeDriver**: [https://chromedriver.chromium.org/](https://chromedriver.chromium.org/)
+- **Selenium Documentation**: [https://selenium-python.readthedocs.io/](https://selenium-python.readthedocs.io/)
+- **WhatsApp Web**: [https://web.whatsapp.com/](https://web.whatsapp.com/)
+
+### 🎯 **Quick Verification Checklist**
+
+Before using WhatsApp automation, ensure:
+
+- ✅ Google Chrome is installed and updated
+- ✅ Chrome opens from command line
+- ✅ Internet connection is stable
+- ✅ WhatsApp Web loads in Chrome manually
+- ✅ Python application can detect Chrome
+- ✅ No antivirus blocking automated browsing
+- ✅ ChromeDriver auto-download works
+
+**🎉 Once everything is working, you'll be able to:**
+- 📱 Send automated WhatsApp reminders
+- 📚 Notify students about overdue books
+- 💳 Send subscription expiry alerts
+- 📊 Bulk message student groups
 
 ---
 
@@ -235,7 +459,42 @@ Library Management/
 ### 🐛 **Common Issues**
 
 **Q: WhatsApp automation not working?**
-A: Ensure Chrome browser is installed and WhatsApp Web is accessible. The system auto-detects Chrome installation.
+A: Follow these steps:
+1. **Check Chrome Installation**: Use the "Test Chrome Installation" button in the app
+2. **Verify Chrome Path**: Ensure Chrome is installed in standard locations:
+   - `C:\Program Files\Google\Chrome\Application\chrome.exe` (Windows)
+   - `/usr/bin/google-chrome` (Linux)
+3. **Update Chrome**: Ensure you have the latest Chrome version
+4. **Clear Session Data**: Use the "Clear Session Data" button
+5. **Check Internet**: Verify WhatsApp Web loads manually at [web.whatsapp.com](https://web.whatsapp.com)
+
+**Q: "Chrome not found" error on Windows?**
+A: Try these solutions:
+1. **Install Chrome using winget**: `winget install Google.Chrome`
+2. **Add Chrome to PATH**: Add `C:\Program Files\Google\Chrome\Application` to system PATH
+3. **Check User Installation**: Look for Chrome in `%LOCALAPPDATA%\Google\Chrome\Application\`
+4. **Restart Application**: Close and reopen the application after installing Chrome
+
+**Q: "Chrome not found" error on Fedora/Linux?**
+A: Install Chrome using these commands:
+```bash
+# Fedora
+sudo dnf install google-chrome-stable
+# OR install Chromium
+sudo dnf install chromium
+
+# Ubuntu/Debian
+sudo apt update && sudo apt install google-chrome-stable
+
+# Verify installation
+which google-chrome
+```
+
+**Q: ChromeDriver compatibility issues?**
+A: The app auto-downloads ChromeDriver, but if issues persist:
+1. **Clear ChromeDriver cache**: Delete `~/.wdm` folder (Linux) or `%USERPROFILE%\.wdm` (Windows)
+2. **Update Chrome**: Ensure Chrome is up-to-date
+3. **Manual ChromeDriver**: Download from [chromedriver.chromium.org](https://chromedriver.chromium.org/)
 
 **Q: Database errors on startup?**
 A: Run `python setup.py` to reinitialize the database with sample data.
@@ -245,6 +504,18 @@ A: Check that the `data/receipts/` directory exists and has write permissions.
 
 **Q: Seat assignment conflicts?**
 A: The system automatically prevents overlapping subscriptions and validates seat availability.
+
+**Q: Seats showing as occupied when they shouldn't be?**
+A: Use the new diagnostic tools:
+1. **Click "Fix Occupancy Issues"** in the seat management area
+2. **Use "Diagnose Seat"** to see detailed subscription status
+3. **Clear expired subscriptions** that are still marked as active
+
+**Q: Currency symbol (₹) not displaying correctly?**
+A: Ensure your system supports UTF-8 encoding:
+1. **Windows**: Set system locale to support Unicode
+2. **Linux**: Ensure `LANG` environment variable includes UTF-8 (e.g., `en_US.UTF-8`)
+3. **Python**: The app handles encoding automatically, but system fonts may need Unicode support
 
 ### 📞 **Support**
 
