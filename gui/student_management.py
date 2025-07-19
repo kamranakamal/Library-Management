@@ -1134,8 +1134,14 @@ class SubscriptionEditDialog(tk.Toplevel):
         self.updated = False
         
         self.title("Edit Subscription")
-        self.geometry("400x300")
+        self.geometry("450x400")
         self.resizable(False, False)
+        
+        # Center the window
+        self.update_idletasks()
+        x = (self.winfo_screenwidth() // 2) - (450 // 2)
+        y = (self.winfo_screenheight() // 2) - (400 // 2)
+        self.geometry(f"450x400+{x}+{y}")
         
         # Make dialog modal
         self.transient(parent)
@@ -1187,12 +1193,16 @@ class SubscriptionEditDialog(tk.Toplevel):
         
         # Buttons
         button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill='x', pady=20)
+        button_frame.pack(fill='x', pady=20, side='bottom')
         
-        ttk.Button(button_frame, text="Save Changes", 
-                  command=self.save_changes).pack(side='left', padx=5)
-        ttk.Button(button_frame, text="Cancel", 
-                  command=self.destroy).pack(side='right', padx=5)
+        # Create button subframe for centering
+        button_subframe = ttk.Frame(button_frame)
+        button_subframe.pack(expand=True)
+        
+        ttk.Button(button_subframe, text="Save Changes", 
+                  command=self.save_changes, width=15).pack(side='left', padx=10)
+        ttk.Button(button_subframe, text="Cancel", 
+                  command=self.destroy, width=15).pack(side='left', padx=10)
     
     def load_data(self):
         """Load subscription data into form"""
@@ -1250,8 +1260,14 @@ class SubscriptionRenewalDialog(tk.Toplevel):
         self.renewed = False
         
         self.title("Renew Subscription")
-        self.geometry("450x350")
+        self.geometry("500x450")
         self.resizable(False, False)
+        
+        # Center the window
+        self.update_idletasks()
+        x = (self.winfo_screenwidth() // 2) - (500 // 2)
+        y = (self.winfo_screenheight() // 2) - (450 // 2)
+        self.geometry(f"500x450+{x}+{y}")
         
         # Make dialog modal
         self.transient(parent)
@@ -1313,12 +1329,16 @@ class SubscriptionRenewalDialog(tk.Toplevel):
         
         # Buttons
         button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill='x', pady=20)
+        button_frame.pack(fill='x', pady=20, side='bottom')
         
-        ttk.Button(button_frame, text="Renew Subscription", 
-                  command=self.renew_subscription).pack(side='left', padx=5)
-        ttk.Button(button_frame, text="Cancel", 
-                  command=self.destroy).pack(side='right', padx=5)
+        # Create button subframe for centering
+        button_subframe = ttk.Frame(button_frame)
+        button_subframe.pack(expand=True)
+        
+        ttk.Button(button_subframe, text="Renew Subscription", 
+                  command=self.renew_subscription, width=20).pack(side='left', padx=10)
+        ttk.Button(button_subframe, text="Cancel", 
+                  command=self.destroy, width=15).pack(side='left', padx=10)
     
     def load_data(self):
         """Load default renewal data"""
