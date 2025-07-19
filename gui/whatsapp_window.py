@@ -25,6 +25,9 @@ class WhatsAppWindow:
         self.window.geometry("800x600")
         self.window.grab_set()  # Make window modal
         
+        # Start periodic status checker
+        self.start_status_monitor()
+        
         # Create notebook for different functions
         notebook = ttk.Notebook(self.window)
         notebook.pack(fill='both', expand=True, padx=10, pady=10)
@@ -40,6 +43,43 @@ class WhatsAppWindow:
         
         # Custom messages tab
         self.create_custom_messages_tab(notebook)
+    
+    def start_status_monitor(self):
+        """Start periodic status monitoring"""
+        def monitor():
+            if hasattr(self, 'window') and self.window.winfo_exists():
+                # Only check if we have a driver initialized
+                if self.whatsapp.driver:
+                    try:
+                        # Use the comprehensive status check
+                        is_logged_in, status_message = self.whatsapp.check_login_status()
+                        
+                        # Update status based on result
+                        if is_logged_in and not self.whatsapp.is_logged_in:
+                            self.whatsapp.is_logged_in = True
+                            self.status_var.set("Connected")
+                            self.log_message("✅ Login detected - WhatsApp Web connected!")
+                        elif not is_logged_in and self.whatsapp.is_logged_in:
+                            self.whatsapp.is_logged_in = False
+                            if "QR code" in status_message:
+                                self.status_var.set("Waiting for QR scan")
+                                # Don't log every time to avoid spam
+                            else:
+                                self.status_var.set("Connection lost")
+                                self.log_message(f"❌ Connection lost: {status_message}")
+                                
+                    except Exception as e:
+                        # Driver might be closed or other error
+                        if "session deleted" in str(e).lower():
+                            self.whatsapp.is_logged_in = False
+                            self.status_var.set("Browser closed")
+                            self.log_message("Browser session ended")
+                
+                # Schedule next check
+                self.window.after(5000, monitor)  # Check every 5 seconds
+        
+        # Start the monitor
+        self.window.after(1000, monitor)  # Start after 1 second
     
     def create_login_tab(self, parent):
         """Create WhatsApp login tab"""
@@ -75,6 +115,7 @@ Note: Keep this window open while using WhatsApp automation.
         
         ttk.Button(button_frame, text="Initialize WhatsApp", command=self.initialize_whatsapp).pack(side='left', padx=5)
         ttk.Button(button_frame, text="Check Status", command=self.check_status).pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Force Refresh", command=self.force_status_check).pack(side='left', padx=5)
         ttk.Button(button_frame, text="Close WhatsApp", command=self.close_whatsapp).pack(side='left', padx=5)
         
         # Diagnostic frame
@@ -238,67 +279,205 @@ The message includes readmission contact information and encourages them to retu
                     self.log_text.insert('end', f"[{timestamp}] {message}\n")
                     self.log_text.see('end')
                     self.log_text.config(state='disabled')
+                    # Force update the GUI
+                    self.log_text.update_idletasks()
             except Exception as e:
                 # Fallback to console logging if GUI fails
                 print(f"GUI Log Error: {e} - Message: {message}")
         
+        # Always print to console for debugging
+        print(f"WhatsApp Log: {message}")
+        
         # Schedule GUI update on main thread
         try:
-            self.after(0, update_log)
-        except:
+            if hasattr(self, 'window') and self.window:
+                self.window.after(0, update_log)
+        except Exception as e:
             # If after() fails, just print to console
-            print(f"WhatsApp Log: {message}")
+            print(f"Error scheduling GUI update: {e}")
     
     def initialize_whatsapp(self):
         """Initialize WhatsApp Web"""
+        def update_status(status):
+            """Thread-safe status update"""
+            def update():
+                self.status_var.set(status)
+            self.window.after(0, update)
+        
         def init_thread():
             try:
-                self.log_message("Initializing WhatsApp Web...")
-                self.status_var.set("Initializing...")
+                self.log_message("Starting WhatsApp Web initialization...")
+                update_status("Initializing...")
                 
                 # Initialize driver
+                self.log_message("Setting up Chrome driver...")
                 success, message = self.whatsapp.initialize_driver()
+                self.log_message(f"Driver initialization: {message}")
+                
                 if not success:
-                    self.log_message(f"Failed to initialize: {message}")
-                    self.status_var.set("Failed")
+                    self.log_message(f"Failed to initialize driver: {message}")
+                    update_status("Failed")
                     return
+                
+                self.log_message("Driver initialized successfully. Opening WhatsApp Web...")
                 
                 # Login to WhatsApp
                 success, message = self.whatsapp.login_to_whatsapp()
-                self.log_message(message)
+                self.log_message(f"Login attempt: {message}")
                 
                 if "scan the QR code" in message:
-                    self.status_var.set("Waiting for QR scan")
-                    self.log_message("Please scan the QR code in the browser window...")
+                    update_status("Waiting for QR scan")
+                    self.log_message("QR code is ready for scanning. Please scan with your phone.")
                     
-                    # Wait for login
-                    success, message = self.whatsapp.wait_for_login(120)
-                    self.log_message(message)
+                    # Wait for login with progress updates
+                    self.log_message("Waiting for QR code scan (2 minutes timeout)...")
                     
-                    if success:
-                        self.status_var.set("Connected")
-                    else:
-                        self.status_var.set("Failed")
+                    # Custom wait with status updates
+                    import time
+                    from selenium.webdriver.support.ui import WebDriverWait
+                    from selenium.webdriver.support import expected_conditions as EC
+                    from selenium.webdriver.common.by import By
+                    from selenium.common.exceptions import TimeoutException
+                    
+                    timeout = 120
+                    start_time = time.time()
+                    
+                    while time.time() - start_time < timeout:
+                        try:
+                            # Check if logged in (short wait)
+                            wait_short = WebDriverWait(self.whatsapp.driver, 5)
+                            wait_short.until(EC.presence_of_element_located((By.XPATH, '//div[@data-testid="chat-list"]')))
+                            self.whatsapp.is_logged_in = True
+                            update_status("Connected")
+                            self.log_message("✅ WhatsApp Web successfully connected!")
+                            return
+                        except TimeoutException:
+                            # Still waiting, update progress
+                            remaining = int(timeout - (time.time() - start_time))
+                            if remaining > 0:
+                                update_status(f"Waiting for QR scan ({remaining}s)")
+                                if remaining % 10 == 0:  # Log every 10 seconds
+                                    self.log_message(f"Still waiting for QR code scan... ({remaining} seconds remaining)")
+                            continue
+                    
+                    # Timeout reached
+                    update_status("Failed")
+                    self.log_message("❌ Login timeout - please try again")
+                    
+                elif "Already logged in" in message:
+                    update_status("Connected")
+                    self.log_message("✅ Already logged in to WhatsApp Web!")
                 elif success:
-                    self.status_var.set("Connected")
+                    update_status("Connected")
+                    self.log_message("✅ WhatsApp Web connected successfully!")
                 else:
-                    self.status_var.set("Failed")
+                    update_status("Failed")
+                    self.log_message(f"❌ Login failed: {message}")
                     
             except Exception as e:
-                self.log_message(f"Error: {str(e)}")
-                self.status_var.set("Error")
+                error_msg = f"Initialization error: {str(e)}"
+                self.log_message(f"❌ {error_msg}")
+                update_status("Error")
+                import traceback
+                self.log_message(f"Stack trace: {traceback.format_exc()}")
         
         # Run in separate thread to avoid blocking UI
+        self.log_message("Starting WhatsApp initialization in background...")
         threading.Thread(target=init_thread, daemon=True).start()
     
     def check_status(self):
         """Check WhatsApp connection status"""
-        if self.whatsapp.is_logged_in:
-            self.status_var.set("Connected")
-            self.log_message("WhatsApp is connected and ready")
-        else:
-            self.status_var.set("Not connected")
-            self.log_message("WhatsApp is not connected")
+        def check_thread():
+            try:
+                if not self.whatsapp.driver:
+                    self.window.after(0, lambda: self.status_var.set("Not connected"))
+                    self.log_message("WhatsApp driver not initialized")
+                    return
+                
+                # Try to check if still logged in by looking for chat list
+                try:
+                    from selenium.webdriver.support.ui import WebDriverWait
+                    from selenium.webdriver.support import expected_conditions as EC
+                    from selenium.webdriver.common.by import By
+                    from selenium.common.exceptions import TimeoutException
+                    
+                    wait = WebDriverWait(self.whatsapp.driver, 10)
+                    wait.until(EC.presence_of_element_located((By.XPATH, '//div[@data-testid="chat-list"]')))
+                    
+                    self.whatsapp.is_logged_in = True
+                    self.window.after(0, lambda: self.status_var.set("Connected"))
+                    self.log_message("✅ WhatsApp is connected and ready")
+                    
+                except TimeoutException:
+                    # Check if on login page (QR code visible)
+                    try:
+                        self.whatsapp.driver.find_element(By.XPATH, '//canvas')
+                        self.whatsapp.is_logged_in = False
+                        self.window.after(0, lambda: self.status_var.set("Waiting for QR scan"))
+                        self.log_message("⏳ QR code visible - need to scan")
+                    except:
+                        self.whatsapp.is_logged_in = False
+                        self.window.after(0, lambda: self.status_var.set("Connection lost"))
+                        self.log_message("❌ Connection lost or page not loaded properly")
+                        
+                except Exception as e:
+                    self.whatsapp.is_logged_in = False
+                    self.window.after(0, lambda: self.status_var.set("Error"))
+                    self.log_message(f"❌ Error checking status: {str(e)}")
+                    
+            except Exception as e:
+                self.window.after(0, lambda: self.status_var.set("Error"))
+                self.log_message(f"❌ Status check failed: {str(e)}")
+        
+        # Run status check in background thread
+        threading.Thread(target=check_thread, daemon=True).start()
+    
+    def force_status_check(self):
+        """Force an immediate status check with detailed logging"""
+        def force_check():
+            try:
+                self.log_message("🔄 Forcing status check...")
+                
+                if not self.whatsapp.driver:
+                    self.window.after(0, lambda: self.status_var.set("Not connected"))
+                    self.log_message("❌ No driver initialized")
+                    return
+                
+                # Check current URL
+                try:
+                    current_url = self.whatsapp.driver.current_url
+                    self.log_message(f"📍 Current URL: {current_url}")
+                except Exception as e:
+                    self.log_message(f"❌ Cannot get current URL: {e}")
+                    self.window.after(0, lambda: self.status_var.set("Error"))
+                    return
+                
+                # Use comprehensive status check
+                is_logged_in, status_message = self.whatsapp.check_login_status()
+                self.log_message(f"🔍 Status check result: {status_message}")
+                
+                if is_logged_in:
+                    self.whatsapp.is_logged_in = True
+                    self.window.after(0, lambda: self.status_var.set("Connected"))
+                    self.log_message("✅ WhatsApp is connected!")
+                else:
+                    self.whatsapp.is_logged_in = False
+                    if "QR code" in status_message:
+                        self.window.after(0, lambda: self.status_var.set("Waiting for QR scan"))
+                        self.log_message("📱 QR code visible - please scan to login")
+                    elif "loading" in status_message.lower():
+                        self.window.after(0, lambda: self.status_var.set("Loading"))
+                        self.log_message("⏳ Page still loading...")
+                    else:
+                        self.window.after(0, lambda: self.status_var.set("Not connected"))
+                        self.log_message(f"❌ Not connected: {status_message}")
+                    
+            except Exception as e:
+                self.log_message(f"❌ Force status check failed: {str(e)}")
+                self.window.after(0, lambda: self.status_var.set("Error"))
+        
+        # Run in background thread
+        threading.Thread(target=force_check, daemon=True).start()
     
     def close_whatsapp(self):
         """Close WhatsApp connection"""
@@ -581,26 +760,96 @@ The message includes readmission contact information and encourages them to retu
         """Clear WhatsApp session data"""
         try:
             import shutil
+            import platform
+            import time
             
             if messagebox.askyesno("Confirm", 
                 "Clear WhatsApp session data? You'll need to scan QR code again."):
                 
                 # Close existing driver first
                 if self.whatsapp.driver:
+                    self.log_message("Closing browser...")
                     self.whatsapp.close_driver()
+                    time.sleep(2)  # Wait for browser to fully close
                 
-                # Remove session directory
-                session_dir = "./whatsapp_session"
+                # Get session directory
+                session_dir = self.whatsapp.get_session_directory()
+                
                 if os.path.exists(session_dir):
-                    shutil.rmtree(session_dir)
-                    self.log_message("Session data cleared successfully")
-                    self.status_var.set("Session cleared - need to login again")
+                    self.log_message(f"Clearing session directory: {session_dir}")
+                    
+                    try:
+                        # Windows-specific handling
+                        if platform.system() == "Windows":
+                            # On Windows, try multiple methods to remove the directory
+                            self.log_message("Attempting Windows-compatible removal...")
+                            
+                            # Method 1: Try normal removal
+                            try:
+                                shutil.rmtree(session_dir)
+                                self.log_message("✅ Session cleared successfully (method 1)")
+                            except PermissionError as e:
+                                self.log_message(f"Permission error, trying alternative method: {e}")
+                                
+                                # Method 2: Try with error handler
+                                def handle_remove_readonly(func, path, exc):
+                                    try:
+                                        import stat
+                                        os.chmod(path, stat.S_IWRITE)
+                                        func(path)
+                                    except Exception:
+                                        pass
+                                
+                                try:
+                                    shutil.rmtree(session_dir, onerror=handle_remove_readonly)
+                                    self.log_message("✅ Session cleared successfully (method 2)")
+                                except Exception as e2:
+                                    self.log_message(f"Still having issues, trying method 3: {e2}")
+                                    
+                                    # Method 3: Manual file-by-file removal
+                                    try:
+                                        import stat
+                                        for root, dirs, files in os.walk(session_dir, topdown=False):
+                                            for file in files:
+                                                file_path = os.path.join(root, file)
+                                                try:
+                                                    os.chmod(file_path, stat.S_IWRITE)
+                                                    os.remove(file_path)
+                                                except Exception:
+                                                    pass
+                                            for dir in dirs:
+                                                dir_path = os.path.join(root, dir)
+                                                try:
+                                                    os.rmdir(dir_path)
+                                                except Exception:
+                                                    pass
+                                        os.rmdir(session_dir)
+                                        self.log_message("✅ Session cleared successfully (method 3)")
+                                    except Exception as e3:
+                                        self.log_message(f"⚠️ Partial clear only: {e3}")
+                                        self.log_message("You may need to manually delete browser data")
+                        else:
+                            # Linux/Mac removal
+                            shutil.rmtree(session_dir)
+                            self.log_message("✅ Session cleared successfully")
+                            
+                    except Exception as e:
+                        self.log_message(f"❌ Error clearing session: {str(e)}")
+                        # Provide manual instructions
+                        self.log_message("Manual cleanup instructions:")
+                        self.log_message(f"1. Close this application completely")
+                        self.log_message(f"2. Delete folder: {session_dir}")
+                        self.log_message(f"3. Restart the application")
+                        
+                    self.status_var.set("Session cleared")
                 else:
                     self.log_message("No session data found to clear")
+                    self.status_var.set("No session data")
                     
         except Exception as e:
-            self.log_message(f"Error clearing session: {str(e)}")
-            messagebox.showerror("Error", f"Failed to clear session: {str(e)}")
+            error_msg = f"Failed to clear session: {str(e)}"
+            self.log_message(f"❌ {error_msg}")
+            messagebox.showerror("Error", error_msg)
     
     def __del__(self):
         """Cleanup when window is closed"""
