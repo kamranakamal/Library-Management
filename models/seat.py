@@ -48,7 +48,7 @@ class Seat:
         """Update existing seat record"""
         query = '''
             UPDATE seats SET
-                row_number = ?, gender_restriction = ?, updated_at = CURRENT_TIMESTAMP
+                row_number = ?, gender_restriction = ?
             WHERE id = ?
         '''
         params = (self.row_number, self.gender_restriction, self.id)
