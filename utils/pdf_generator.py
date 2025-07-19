@@ -212,9 +212,9 @@ class PDFGenerator:
             pdf.set_font('Arial', '', 12)
             
             # Receipt number and date
-            pdf.cell(0, 8, f"Receipt No: {renewal_data['receipt_number']}", 0, 1)
+            pdf.cell(0, 8, f"Renewal Receipt No: {renewal_data['receipt_number']}", 0, 1)
+            pdf.cell(0, 8, f"Original Receipt No: {renewal_data['original_receipt']}", 0, 1)
             pdf.cell(0, 8, f"Date: {datetime.now().strftime('%d/%m/%Y')}", 0, 1)
-            pdf.cell(0, 8, f"Previous Receipt: {renewal_data['previous_receipt_number']}", 0, 1)
             pdf.ln(5)
             
             # Student details
@@ -222,11 +222,30 @@ class PDFGenerator:
             pdf.cell(0, 8, 'Student Details:', 0, 1)
             pdf.set_font('Arial', '', 12)
             
+            # Save Y position before student details
+            student_details_y = pdf.get_y()
+            
             pdf.cell(0, 8, f"Name: {renewal_data['student_name']}", 0, 1)
             pdf.cell(0, 8, f"Mobile: {renewal_data['mobile_number']}", 0, 1)
             pdf.cell(0, 8, f"Seat Number: {renewal_data['seat_id']}", 0, 1)
             pdf.cell(0, 8, f"Timeslot: {renewal_data['timeslot_name']}", 0, 1)
             pdf.cell(0, 8, f"Time: {renewal_data['timeslot_time']}", 0, 1)
+            
+            # Add QR code on the right side of student details
+            qr_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'sangharsh_library_qr.png')
+            if os.path.exists(qr_path):
+                try:
+                    # Position QR code on the right side
+                    pdf.set_xy(140, student_details_y)
+                    pdf.image(qr_path, x=140, y=student_details_y, w=30, h=30)
+                    
+                    # Add text below QR code
+                    pdf.set_xy(125, student_details_y + 32)
+                    pdf.set_font('Arial', '', 8)
+                    pdf.cell(60, 3, 'Scan to visit our website', 0, 1, 'C')
+                except Exception as e:
+                    print(f"Error adding QR code: {e}")
+            
             pdf.ln(5)
             
             # Renewal details
@@ -234,9 +253,10 @@ class PDFGenerator:
             pdf.cell(0, 8, 'Renewal Details:', 0, 1)
             pdf.set_font('Arial', '', 12)
             
-            pdf.cell(0, 8, f"Previous Period: {renewal_data['previous_start']} to {renewal_data['previous_end']}", 0, 1)
-            pdf.cell(0, 8, f"New Period: {renewal_data['new_start']} to {renewal_data['new_end']}", 0, 1)
-            pdf.cell(0, 8, f"Amount Paid: {DEFAULT_CURRENCY}{renewal_data['amount_paid']}", 0, 1)
+            pdf.cell(0, 8, f"Previous End Date: {renewal_data['previous_end']}", 0, 1)
+            pdf.cell(0, 8, f"New End Date: {renewal_data['new_end']}", 0, 1)
+            pdf.cell(0, 8, f"Renewal Amount: {DEFAULT_CURRENCY}{renewal_data['renewal_amount']}", 0, 1)
+            pdf.cell(0, 8, f"Total Amount Paid: {DEFAULT_CURRENCY}{renewal_data['total_amount']}", 0, 1)
             pdf.ln(10)
             
             # Footer

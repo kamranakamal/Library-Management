@@ -1139,6 +1139,7 @@ class SubscriptionEditDialog(tk.Toplevel):
     
     def __init__(self, parent, subscription):
         super().__init__(parent)
+        self.parent = parent  # Store parent reference
         self.subscription = subscription
         self.updated = False
         
@@ -1265,6 +1266,7 @@ class SubscriptionRenewalDialog(tk.Toplevel):
     
     def __init__(self, parent, subscription):
         super().__init__(parent)
+        self.parent = parent  # Store parent reference
         self.subscription = subscription
         self.renewed = False
         
@@ -1399,19 +1401,19 @@ class SubscriptionRenewalDialog(tk.Toplevel):
                 current_end = self.subscription.end_date
             new_end = current_end + timedelta(days=days)
             
-            # Create renewal (new subscription record)
-            new_subscription = Subscription(
-                student_id=self.subscription.student_id,
-                seat_id=self.subscription.seat_id,
-                timeslot_id=self.subscription.timeslot_id,
-                start_date=str(current_end + timedelta(days=1)),
-                end_date=str(new_end),
-                amount_paid=amount
-            )
+            # Store original values for receipt generation
+            original_end = self.subscription.end_date
+            original_amount = self.subscription.amount_paid
             
-            new_subscription.save()
+            # Update the existing subscription instead of creating new one
+            self.subscription.end_date = str(new_end)
+            self.subscription.amount_paid = float(self.subscription.amount_paid) + amount  # Add to existing amount
+            self.subscription.is_active = True  # Ensure it's active
             
-            # Generate receipt
+            # Save the updated subscription
+            self.subscription.save()
+            
+            # Generate receipt with renewal details
             try:
                 from utils.pdf_generator import PDFGenerator
                 student = Student.get_by_id(self.subscription.student_id)
@@ -1419,11 +1421,23 @@ class SubscriptionRenewalDialog(tk.Toplevel):
                 timeslot = Timeslot.get_by_id(self.subscription.timeslot_id)
                 
                 pdf_generator = PDFGenerator()
-                filename = f"renewal_receipt_{new_subscription.receipt_number}.pdf"
                 
-                success, result = pdf_generator.generate_renewal_receipt(
-                    new_subscription, student, seat, timeslot, filename
-                )
+                # Create renewal receipt data
+                renewal_data = {
+                    'receipt_number': f"REN-{self.subscription.receipt_number}-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                    'original_receipt': self.subscription.receipt_number,
+                    'student_name': student.name,
+                    'mobile_number': student.mobile_number,
+                    'seat_id': seat.id,
+                    'timeslot_name': timeslot.name,
+                    'timeslot_time': f"{timeslot.start_time} - {timeslot.end_time}",
+                    'previous_end': str(original_end),
+                    'new_end': str(new_end),
+                    'renewal_amount': amount,
+                    'total_amount': self.subscription.amount_paid
+                }
+                
+                success, result = pdf_generator._generate_renewal_receipt_from_data(renewal_data)
                 
                 if success:
                     logging.info(f"Renewal receipt generated: {result}")
@@ -1434,7 +1448,12 @@ class SubscriptionRenewalDialog(tk.Toplevel):
                 logging.error(f"Receipt generation failed: {e}")
             
             self.renewed = True
-            messagebox.showinfo("Success", f"Subscription renewed successfully!\nNew receipt: {new_subscription.receipt_number}")
+            messagebox.showinfo("Success", f"Subscription renewed successfully!\nExtended until: {new_end}\nRenewal amount: {amount}")
+            
+            # Call analytics refresh callback if available
+            if hasattr(self.parent, 'analytics_refresh_callback') and self.parent.analytics_refresh_callback:
+                self.parent.analytics_refresh_callback()
+            
             self.destroy()
             
         except ValueError:
