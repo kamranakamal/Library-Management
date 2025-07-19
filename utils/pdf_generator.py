@@ -164,7 +164,7 @@ class PDFGenerator:
             
             # Ensure proper spacing - move to the bottom of either student details or QR codes
             final_y = max(student_details_end, qr_bottom_y)
-            pdf.set_y(final_y + 8)  # Add small gap before next section
+            pdf.set_y(final_y + 3)  # Reduced gap from 8 to 3 for better spacing
             
             # Subscription details
             pdf.set_font('Arial', 'B', 12)

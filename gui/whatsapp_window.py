@@ -909,32 +909,90 @@ The message includes readmission contact information and encourages them to retu
     
     def load_expiring_subscriptions(self):
         """Load expiring subscriptions"""
+        # Find and disable the load button temporarily
         try:
-            # Clear existing items
-            for item in self.reminder_tree.get_children():
-                self.reminder_tree.delete(item)
-            
-            days = int(self.reminder_days_var.get())
-            expiring_subs = Subscription.get_expiring_soon(days)
-            
-            for sub in expiring_subs:
-                from datetime import datetime, date
-                end_date = datetime.strptime(sub['end_date'], '%Y-%m-%d').date()
-                days_left = (end_date - date.today()).days
+            for widget in self.window.winfo_children():
+                if isinstance(widget, ttk.Frame):
+                    for child in widget.winfo_children():
+                        if isinstance(child, ttk.Notebook):
+                            for tab in child.tabs():
+                                tab_frame = child.nametowidget(tab)
+                                self.update_button_text(tab_frame, "Load Expiring Subscriptions", "Loading...")
+                                self.set_button_state(tab_frame, "Load Expiring Subscriptions", 'disabled')
+        except Exception:
+            pass
+        
+        def load_thread():
+            try:
+                # Get data in background thread
+                days = int(self.reminder_days_var.get())
+                expiring_subs = Subscription.get_expiring_soon(days)
                 
-                self.reminder_tree.insert('', 'end', values=(
-                    sub['student_name'],
-                    sub['mobile_number'],
-                    f"Seat {sub['seat_number']}",
-                    sub['timeslot_name'],
-                    sub['end_date'],
-                    days_left
-                ))
-            
-            self.log_message(f"Loaded {len(expiring_subs)} expiring subscriptions")
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to load expiring subscriptions: {str(e)}")
+                # Update UI in main thread
+                def update_ui():
+                    try:
+                        # Clear existing items
+                        for item in self.reminder_tree.get_children():
+                            self.reminder_tree.delete(item)
+                        
+                        for sub in expiring_subs:
+                            from datetime import datetime, date
+                            end_date = datetime.strptime(sub['end_date'], '%Y-%m-%d').date()
+                            days_left = (end_date - date.today()).days
+                            
+                            self.reminder_tree.insert('', 'end', values=(
+                                sub['student_name'],
+                                sub['mobile_number'],
+                                f"Seat {sub['seat_number']}",
+                                sub['timeslot_name'],
+                                sub['end_date'],
+                                days_left
+                            ))
+                        
+                        self.log_message(f"Loaded {len(expiring_subs)} expiring subscriptions")
+                        
+                    except Exception as e:
+                        self.log_message(f"Error updating UI: {str(e)}")
+                        messagebox.showerror("Error", f"Failed to load expiring subscriptions: {str(e)}")
+                    finally:
+                        # Re-enable button and restore text
+                        try:
+                            for widget in self.window.winfo_children():
+                                if isinstance(widget, ttk.Frame):
+                                    for child in widget.winfo_children():
+                                        if isinstance(child, ttk.Notebook):
+                                            for tab in child.tabs():
+                                                tab_frame = child.nametowidget(tab)
+                                                self.update_button_text(tab_frame, "Loading...", "Load Expiring Subscriptions")
+                                                self.set_button_state(tab_frame, "Load Expiring Subscriptions", 'normal')
+                        except Exception:
+                            pass
+                
+                # Schedule UI update on main thread
+                if hasattr(self, 'window') and self.window.winfo_exists():
+                    self.window.after(0, update_ui)
+                    
+            except Exception as e:
+                # Schedule error message on main thread
+                if hasattr(self, 'window') and self.window.winfo_exists():
+                    def show_error():
+                        messagebox.showerror("Error", f"Failed to load expiring subscriptions: {str(e)}")
+                        # Re-enable button
+                        try:
+                            for widget in self.window.winfo_children():
+                                if isinstance(widget, ttk.Frame):
+                                    for child in widget.winfo_children():
+                                        if isinstance(child, ttk.Notebook):
+                                            for tab in child.tabs():
+                                                tab_frame = child.nametowidget(tab)
+                                                self.update_button_text(tab_frame, "Loading...", "Load Expiring Subscriptions")
+                                                self.set_button_state(tab_frame, "Load Expiring Subscriptions", 'normal')
+                        except Exception:
+                            pass
+                    self.window.after(0, show_error)
+        
+        # Run in background thread
+        threading.Thread(target=load_thread, daemon=True).start()
     
     def send_subscription_reminders(self):
         """Send subscription reminder messages"""
@@ -951,14 +1009,15 @@ The message includes readmission contact information and encourages them to retu
                     self.log_message("No expiring subscriptions found")
                     return
                 
-                self.log_message(f"Sending reminders to {len(expiring_subs)} students...")
+                self.log_message(f"Sending consolidated reminders to students...")
                 
-                results = self.whatsapp.send_subscription_reminders(expiring_subs)
+                # Use consolidated reminders instead of individual messages
+                results = self.whatsapp.send_consolidated_reminders(expiring_subs)
                 
                 successful = len([r for r in results if r['success']])
                 failed = len(results) - successful
                 
-                self.log_message(f"Reminders sent: {successful} successful, {failed} failed")
+                self.log_message(f"Consolidated reminders sent: {successful} successful, {failed} failed")
                 
                 # Show detailed results
                 for result in results:
@@ -974,38 +1033,55 @@ The message includes readmission contact information and encourages them to retu
     
     def load_expired_subscriptions(self):
         """Load expired subscriptions for cancellation messages"""
-        try:
-            days = int(self.cancellation_days_var.get())
-            from models.subscription import Subscription
-            
-            expired_subs = Subscription.get_expired_subscriptions(days_expired=days)
-            
-            # Clear existing items
-            for item in self.cancellation_tree.get_children():
-                self.cancellation_tree.delete(item)
-            
-            # Add expired subscriptions to tree
-            for sub in expired_subs:
-                from datetime import date, datetime
+        def load_thread():
+            try:
+                # Get data in background thread
+                days = int(self.cancellation_days_var.get())
+                from models.subscription import Subscription
                 
-                # Calculate days expired
-                end_date = datetime.strptime(sub['end_date'], '%Y-%m-%d').date()
-                days_expired = (date.today() - end_date).days
+                expired_subs = Subscription.get_expired_subscriptions(days_expired=days)
                 
-                self.cancellation_tree.insert('', 'end', values=(
-                    sub['student_name'],
-                    sub['mobile_number'],
-                    sub['seat_number'],
-                    sub['timeslot_name'],
-                    sub['end_date'],
-                    f"{days_expired} days"
-                ))
-            
-            self.log_message(f"Loaded {len(expired_subs)} expired subscriptions for cancellation")
-            
-        except Exception as e:
-            self.log_message(f"Error loading expired subscriptions: {str(e)}")
-            messagebox.showerror("Error", f"Failed to load expired subscriptions: {str(e)}")
+                # Update UI in main thread
+                def update_ui():
+                    try:
+                        # Clear existing items
+                        for item in self.cancellation_tree.get_children():
+                            self.cancellation_tree.delete(item)
+                        
+                        # Add expired subscriptions to tree
+                        for sub in expired_subs:
+                            from datetime import date, datetime
+                            
+                            # Calculate days expired
+                            end_date = datetime.strptime(sub['end_date'], '%Y-%m-%d').date()
+                            days_expired = (date.today() - end_date).days
+                            
+                            self.cancellation_tree.insert('', 'end', values=(
+                                sub['student_name'],
+                                sub['mobile_number'],
+                                sub['seat_number'],
+                                sub['timeslot_name'],
+                                sub['end_date'],
+                                f"{days_expired} days"
+                            ))
+                        
+                        self.log_message(f"Loaded {len(expired_subs)} expired subscriptions for cancellation")
+                        
+                    except Exception as e:
+                        self.log_message(f"Error updating UI: {str(e)}")
+                        messagebox.showerror("Error", f"Failed to load expired subscriptions: {str(e)}")
+                
+                # Schedule UI update on main thread
+                if hasattr(self, 'window') and self.window.winfo_exists():
+                    self.window.after(0, update_ui)
+                    
+            except Exception as e:
+                # Schedule error message on main thread
+                if hasattr(self, 'window') and self.window.winfo_exists():
+                    self.window.after(0, lambda: messagebox.showerror("Error", f"Failed to load expired subscriptions: {str(e)}"))
+        
+        # Run in background thread
+        threading.Thread(target=load_thread, daemon=True).start()
     
     def send_cancellation_messages(self):
         """Send cancellation messages to expired students"""
@@ -1269,6 +1345,28 @@ The message includes readmission contact information and encourages them to retu
             error_msg = f"Failed to clear session: {str(e)}"
             self.log_message(f"❌ {error_msg}")
             messagebox.showerror("Error", error_msg)
+    
+    def update_button_text(self, parent, old_text, new_text):
+        """Update button text recursively"""
+        try:
+            for widget in parent.winfo_children():
+                if isinstance(widget, ttk.Button) and widget.cget('text') == old_text:
+                    widget.config(text=new_text)
+                elif hasattr(widget, 'winfo_children'):
+                    self.update_button_text(widget, old_text, new_text)
+        except Exception:
+            pass
+    
+    def set_button_state(self, parent, button_text, state):
+        """Set button state recursively"""
+        try:
+            for widget in parent.winfo_children():
+                if isinstance(widget, ttk.Button) and button_text in widget.cget('text'):
+                    widget.config(state=state)
+                elif hasattr(widget, 'winfo_children'):
+                    self.set_button_state(widget, button_text, state)
+        except Exception:
+            pass
     
     def on_window_close(self):
         """Handle window close event"""

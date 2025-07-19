@@ -238,6 +238,7 @@ class StudentManagementFrame(ttk.Frame):
         ttk.Button(button_frame, text="Save Student", command=self.save_student).grid(row=0, column=0, padx=5)
         ttk.Button(button_frame, text="Clear Form", command=self.clear_form).grid(row=0, column=1, padx=5)
         ttk.Button(button_frame, text="Delete Student", command=self.delete_student).grid(row=0, column=2, padx=5)
+        ttk.Button(button_frame, text="Send WhatsApp", command=self.send_registration_confirmation).grid(row=0, column=3, padx=5)
         
         # Status label
         row += 1
@@ -254,13 +255,13 @@ class StudentManagementFrame(ttk.Frame):
     def create_subscription_form(self, parent, start_row):
         """Create subscription form section"""
         # Separator
-        ttk.Separator(parent, orient='horizontal').grid(row=start_row, column=0, columnspan=2, sticky='ew', pady=10)
+        ttk.Separator(parent, orient='horizontal').grid(row=start_row, column=0, columnspan=2, sticky='ew', pady=(5, 3))
         start_row += 1
         
         # Subscription header
-        ttk.Label(parent, text="Add New Subscription", font=('Arial', 10, 'bold')).grid(row=start_row, column=0, columnspan=2, pady=5)
+        ttk.Label(parent, text="Add New Subscription", font=('Arial', 10, 'bold')).grid(row=start_row, column=0, columnspan=2, pady=(2, 1))
         ttk.Label(parent, text="(Works for both new and existing students)", 
-                 font=('Arial', 8), foreground='gray').grid(row=start_row+1, column=0, columnspan=2)
+                 font=('Arial', 8), foreground='gray').grid(row=start_row+1, column=0, columnspan=2, pady=(0, 3))
         start_row += 2
         
         # Timeslot
@@ -312,9 +313,6 @@ class StudentManagementFrame(ttk.Frame):
         sub_button_frame.grid(row=start_row, column=0, columnspan=2, pady=10, sticky='ew')
         
         ttk.Button(sub_button_frame, text="Add Subscription", command=self.add_subscription).grid(row=0, column=0, padx=5)
-        ttk.Button(sub_button_frame, text="Renew Subscription", command=self.renew_subscription).grid(row=0, column=1, padx=5)
-        ttk.Button(sub_button_frame, text="Generate Receipt", command=self.generate_receipt).grid(row=0, column=2, padx=5)
-        ttk.Button(sub_button_frame, text="Comprehensive Receipt", command=self.generate_comprehensive_receipt).grid(row=0, column=3, padx=5)
     
     def create_student_list(self):
         """Create student list panel"""
@@ -616,6 +614,83 @@ class StudentManagementFrame(ttk.Frame):
             messagebox.showerror("Validation Error", str(e))
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save student: {str(e)}")
+    
+    def send_registration_confirmation(self):
+        """Send registration confirmation message via WhatsApp"""
+        if not self.current_student_id:
+            messagebox.showwarning("Warning", "Please select a student first")
+            return
+        
+        try:
+            # Get selected student data
+            student = Student.get_by_id(self.current_student_id)
+            if not student:
+                messagebox.showerror("Error", "Student not found")
+                return
+            
+            # Get the most recent subscription for this student
+            from models.subscription import Subscription
+            subscriptions = Subscription.get_by_student_id(self.current_student_id)
+            if not subscriptions:
+                messagebox.showwarning("Warning", "No subscriptions found for this student")
+                return
+            
+            # Get the latest subscription
+            latest_subscription = subscriptions[0]  # Assuming they're ordered by date
+            
+            # Get additional data
+            from models.seat import Seat
+            from models.timeslot import Timeslot
+            seat = Seat.get_by_id(latest_subscription.seat_id)
+            timeslot = Timeslot.get_by_id(latest_subscription.timeslot_id)
+            
+            # Prepare student data
+            student_data = {
+                'name': student.name,
+                'father_name': student.father_name,
+                'mobile_number': student.mobile_number,
+                'registration_date': student.registration_date.strftime('%Y-%m-%d')
+            }
+            
+            # Prepare subscription data
+            subscription_data = {
+                'receipt_number': latest_subscription.receipt_number,
+                'seat_number': seat.seat_number if seat else 'N/A',
+                'timeslot_name': f"{timeslot.name} ({timeslot.start_time} - {timeslot.end_time})" if timeslot else 'N/A',
+                'start_date': latest_subscription.start_date.strftime('%Y-%m-%d'),
+                'end_date': latest_subscription.end_date.strftime('%Y-%m-%d'),
+                'amount_paid': latest_subscription.amount_paid
+            }
+            
+            # Import and use WhatsApp automation
+            from utils.whatsapp_automation import WhatsAppAutomation
+            whatsapp = WhatsAppAutomation()
+            
+            def send_message_thread():
+                try:
+                    # Check if WhatsApp is initialized
+                    if not whatsapp.driver:
+                        messagebox.showerror("Error", "WhatsApp automation is not initialized. Please initialize WhatsApp first.")
+                        return
+                    
+                    # Send registration confirmation
+                    success, message = whatsapp.send_registration_confirmation(student_data, subscription_data)
+                    
+                    if success:
+                        messagebox.showinfo("Success", f"Registration confirmation sent to {student_data['name']}")
+                    else:
+                        messagebox.showerror("Error", f"Failed to send message: {message}")
+                        
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to send WhatsApp message: {str(e)}")
+            
+            # Confirm before sending
+            if messagebox.askyesno("Confirm", f"Send registration confirmation to {student_data['name']} ({student_data['mobile_number']})?"):
+                import threading
+                threading.Thread(target=send_message_thread, daemon=True).start()
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to send registration confirmation: {str(e)}")
     
     def select_student_by_id(self, student_id):
         """Select a student in the tree by their ID"""

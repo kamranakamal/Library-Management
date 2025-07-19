@@ -1468,6 +1468,108 @@ Best regards,
         result['diagnostics'] = diagnostics
         return result
     
+    def send_consolidated_reminders(self, expiring_subscriptions):
+        """Send subscription expiry reminders as consolidated messages per student"""
+        # Group subscriptions by student
+        student_groups = {}
+        for subscription in expiring_subscriptions:
+            phone = subscription['mobile_number']
+            if phone not in student_groups:
+                student_groups[phone] = {
+                    'name': subscription['student_name'],
+                    'subscriptions': []
+                }
+            student_groups[phone]['subscriptions'].append(subscription)
+        
+        messages = []
+        for phone, data in student_groups.items():
+            name = data['name']
+            subscriptions = data['subscriptions']
+            
+            if len(subscriptions) == 1:
+                # Single subscription
+                sub = subscriptions[0]
+                message = f"""🔔 *Subscription Reminder*
+
+Hello {name}! 👋
+
+Your library subscription is expiring soon:
+
+📋 *Subscription Details:*
+• Seat Number: *{sub['seat_number']}*
+• Timeslot: *{sub['timeslot_name']}*
+• Expiry Date: *{sub['end_date']}* 📅
+
+🔄 Please visit us to renew your subscription.
+
+📍 *{LIBRARY_NAME}*
+📞 {LIBRARY_PHONE}
+📧 {LIBRARY_EMAIL}
+🏢 {LIBRARY_ADDRESS}
+
+Thank you for choosing {LIBRARY_NAME}! 🙏"""
+            else:
+                # Multiple subscriptions
+                subs_list = ""
+                for i, sub in enumerate(subscriptions, 1):
+                    subs_list += f"\n{i}. Seat *{sub['seat_number']}* | {sub['timeslot_name']} | Expires: *{sub['end_date']}*"
+                
+                message = f"""🔔 *Multiple Subscription Reminders*
+
+Hello {name}! 👋
+
+You have {len(subscriptions)} subscriptions expiring soon:
+
+📋 *Subscription Details:*{subs_list}
+
+🔄 Please visit us to renew your subscriptions.
+
+📍 *{LIBRARY_NAME}*
+📞 {LIBRARY_PHONE}
+📧 {LIBRARY_EMAIL}
+🏢 {LIBRARY_ADDRESS}
+
+Thank you for choosing {LIBRARY_NAME}! 🙏"""
+            
+            messages.append({
+                'name': name,
+                'phone': phone,
+                'message': message
+            })
+        
+        return self.send_bulk_messages(messages)
+    
+    def send_registration_confirmation(self, student_data, subscription_data):
+        """Send registration confirmation message"""
+        message = f"""🎉 *Registration Successful!*
+
+Welcome to {LIBRARY_NAME}, {student_data['name']}! 👋
+
+✅ *Registration Details:*
+• Student Name: *{student_data['name']}*
+• Father's Name: {student_data['father_name']}
+• Mobile: {student_data['mobile_number']}
+• Registration Date: *{student_data['registration_date']}*
+
+📋 *Subscription Details:*
+• Receipt No: *{subscription_data['receipt_number']}*
+• Seat Number: *{subscription_data['seat_number']}*
+• Timeslot: *{subscription_data['timeslot_name']}*
+• Duration: *{subscription_data['start_date']}* to *{subscription_data['end_date']}*
+• Amount Paid: *₹{subscription_data['amount_paid']}*
+
+📍 *{LIBRARY_NAME}*
+📞 {LIBRARY_PHONE}
+📧 {LIBRARY_EMAIL}
+🏢 {LIBRARY_ADDRESS}
+
+🔔 You'll receive reminders before your subscription expires.
+
+Thank you for choosing {LIBRARY_NAME}! 
+Happy studying! 📚✨"""
+        
+        return self.send_message(student_data['mobile_number'], message)
+
     def test_message_with_emojis(self, phone_number):
         """Test sending a message with emojis to verify they display correctly"""
         test_message = f"""
