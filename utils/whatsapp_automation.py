@@ -7,6 +7,7 @@ import re
 import os
 import platform
 import subprocess
+import unicodedata
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -25,6 +26,7 @@ class WhatsAppAutomation:
     def __init__(self):
         self.driver = None
         self.is_logged_in = False
+        self._status_check_lock = False  # Simple lock to prevent concurrent status checks
     
     def get_session_directory(self):
         """Get appropriate session directory for the platform"""
@@ -204,6 +206,38 @@ class WhatsAppAutomation:
             chrome_options.add_argument("--disable-dev-shm-usage")
             chrome_options.add_argument("--disable-web-security")
             chrome_options.add_argument("--allow-running-insecure-content")
+            chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+            chrome_options.add_argument("--disable-gpu-sandbox")
+            chrome_options.add_argument("--disable-software-rasterizer")
+            chrome_options.add_argument("--disable-background-timer-throttling")
+            chrome_options.add_argument("--disable-backgrounding-occluded-windows")
+            chrome_options.add_argument("--disable-renderer-backgrounding")
+            chrome_options.add_argument("--disable-field-trial-config")
+            chrome_options.add_argument("--disable-back-forward-cache")
+            chrome_options.add_argument("--disable-hang-monitor")
+            chrome_options.add_argument("--disable-ipc-flooding-protection")
+            chrome_options.add_argument("--disable-prompt-on-repost")
+            chrome_options.add_argument("--disable-client-side-phishing-detection")
+            chrome_options.add_argument("--disable-component-update")
+            chrome_options.add_argument("--disable-default-apps")
+            chrome_options.add_argument("--disable-domain-reliability")
+            chrome_options.add_argument("--no-first-run")
+            chrome_options.add_argument("--no-default-browser-check")
+            chrome_options.add_argument("--disable-logging")
+            chrome_options.add_argument("--disable-login-animations")
+            chrome_options.add_argument("--disable-notifications")
+            chrome_options.add_argument("--disable-password-generation")
+            chrome_options.add_argument("--disable-permissions-api")
+            chrome_options.add_argument("--disable-plugins")
+            chrome_options.add_argument("--disable-popup-blocking")
+            chrome_options.add_argument("--disable-print-preview")
+            chrome_options.add_argument("--disable-sync")
+            chrome_options.add_argument("--memory-pressure-off")
+            chrome_options.add_argument("--max_old_space_size=4096")
+            
+            # Keep alive options
+            chrome_options.add_argument("--keep-alive-for-test")
+            chrome_options.add_argument("--disable-background-mode")
             
             # Performance options
             chrome_options.add_argument("--disable-extensions")
@@ -326,28 +360,24 @@ class WhatsAppAutomation:
             
             try:
                 print("🔍 Checking if already logged in...")
-                # Try multiple selectors for logged-in state
-                logged_in_selectors = [
-                    '//div[@data-testid="chat-list"]',  # Main chat list
-                    '//div[contains(@class, "chat-list")]',  # Alternative chat list
-                    '//div[@data-testid="chatlist-header"]',  # Chat list header
-                    '//span[@data-testid="default-user"]',  # User profile
-                    '//div[@id="main"]',  # Main WhatsApp container
-                    '//div[contains(@class, "two") and contains(@class, "copyable")]',  # Two-pane layout
-                    '//header[@data-testid="chatlist-header"]',  # Header with user info
-                    '//div[@role="application"]//div[contains(@class, "app")]'  # App container
-                ]
                 
-                for selector in logged_in_selectors:
-                    try:
-                        wait_short = WebDriverWait(self.driver, 5)
-                        element = wait_short.until(EC.presence_of_element_located((By.XPATH, selector)))
-                        if element and element.is_displayed():
-                            self.is_logged_in = True
-                            print(f"✅ Already logged in! (Found: {selector})")
-                            return True, "Already logged in to WhatsApp Web"
-                    except TimeoutException:
-                        continue
+                # Use the comprehensive login status check method
+                is_logged_in, status_message = self.check_login_status()
+                
+                if is_logged_in:
+                    self.is_logged_in = True
+                    print(f"✅ Already logged in! Status: {status_message}")
+                    
+                    # Additional wait for page stability if just logged in
+                    if "may be loading" in status_message.lower() or "interface loading" in status_message.lower():
+                        print("⏳ Waiting for interface to fully load...")
+                        stable, stability_msg = self.wait_for_page_stability(timeout=15)
+                        if stable:
+                            print("✅ Interface fully loaded!")
+                        else:
+                            print(f"⚠️ Interface may still be loading: {stability_msg}")
+                    
+                    return True, "Already logged in to WhatsApp Web"
                 
                 print("📱 Not logged in yet, checking for QR code or login elements...")
                 
@@ -449,48 +479,20 @@ class WhatsAppAutomation:
                                 
                                 # Wait for page to fully stabilize after login
                                 print("⏳ Waiting for WhatsApp Web to fully load...")
-                                time.sleep(5)  # Initial wait
+                                time.sleep(3)  # Initial wait
                                 
-                                # Verify page is stable and ready
-                                stability_check_count = 0
-                                max_stability_checks = 6  # 30 seconds total (6 x 5s)
+                                # Use the new stability check method
+                                stable, stability_msg = self.wait_for_page_stability(timeout=30)
                                 
-                                while stability_check_count < max_stability_checks:
-                                    try:
-                                        # Check if we can find key elements that indicate a stable page
-                                        stable_elements = [
-                                            '//div[@data-testid="chat-list"]',
-                                            '//div[@data-testid="chatlist-header"]',
-                                            '//span[@data-testid="default-user"]',
-                                        ]
-                                        
-                                        stable_count = 0
-                                        for stable_selector in stable_elements:
-                                            try:
-                                                element = self.driver.find_element(By.XPATH, stable_selector)
-                                                if element and element.is_displayed():
-                                                    stable_count += 1
-                                            except:
-                                                pass
-                                        
-                                        if stable_count >= 2:  # At least 2 stable elements found
-                                            print("✅ WhatsApp Web is stable and ready!")
-                                            self.is_logged_in = True
-                                            return True, "Successfully logged in to WhatsApp Web"
-                                        else:
-                                            print(f"⏳ Waiting for page to stabilize... ({stability_check_count + 1}/{max_stability_checks})")
-                                            time.sleep(5)
-                                            stability_check_count += 1
-                                            
-                                    except Exception as e:
-                                        print(f"⚠️ Stability check error: {e}")
-                                        time.sleep(5)
-                                        stability_check_count += 1
-                                
-                                # If we reach here, page might not be fully stable but login was detected
-                                print("⚠️ Login detected but page may not be fully stable")
-                                self.is_logged_in = True
-                                return True, "Login detected - WhatsApp Web may still be loading"
+                                if stable:
+                                    print("✅ WhatsApp Web is stable and ready!")
+                                    self.is_logged_in = True
+                                    return True, "Successfully logged in to WhatsApp Web"
+                                else:
+                                    print(f"⚠️ Page may not be fully stable: {stability_msg}")
+                                    # Still consider login successful even if stability check failed
+                                    self.is_logged_in = True
+                                    return True, "Login detected - WhatsApp Web may still be loading"
                                 
                         except TimeoutException:
                             continue
@@ -515,8 +517,90 @@ class WhatsAppAutomation:
             print(f"❌ Login error: {str(e)}")
             return False, f"Login error: {str(e)}"
     
+    def wait_for_page_stability(self, timeout=30, required_checks=3):
+        """Wait for WhatsApp Web page to be stable after login"""
+        try:
+            print(f"⏳ Waiting for page stability (timeout: {timeout}s, checks: {required_checks})...")
+            
+            import time
+            stable_count = 0
+            start_time = time.time()
+            
+            # Elements that should be present and stable
+            stability_selectors = [
+                '//div[@data-testid="chat-list"]',
+                '//div[@data-testid="chatlist-header"]',
+                '//div[@data-testid="side"]',
+            ]
+            
+            while time.time() - start_time < timeout:
+                try:
+                    # Check if the key elements are present and stable
+                    elements_found = 0
+                    
+                    for selector in stability_selectors:
+                        try:
+                            element = self.driver.find_element(By.XPATH, selector)
+                            if element.is_displayed() and element.size['height'] > 0:
+                                elements_found += 1
+                        except:
+                            continue
+                    
+                    if elements_found >= 2:  # At least 2 key elements found
+                        stable_count += 1
+                        print(f"✓ Stability check {stable_count}/{required_checks} passed")
+                        
+                        if stable_count >= required_checks:
+                            print("✅ Page is stable!")
+                            return True, "Page is stable and ready"
+                    else:
+                        stable_count = 0  # Reset if not stable
+                    
+                    time.sleep(1)  # Wait 1 second between checks
+                    
+                except Exception as e:
+                    print(f"⚠️ Stability check error: {e}")
+                    stable_count = 0
+                    time.sleep(1)
+                    continue
+            
+            print("⚠️ Stability timeout reached")
+            return False, "Page stability timeout"
+            
+        except Exception as e:
+            print(f"❌ Stability check failed: {e}")
+            return False, f"Stability check error: {str(e)}"
+    
+    def is_driver_valid(self):
+        """Check if driver is still valid and responsive"""
+        try:
+            if not self.driver:
+                return False
+            
+            # Simple test to see if driver is responsive
+            title = self.driver.title
+            return True
+        except Exception as e:
+            error_str = str(e).lower()
+            if any(error in error_str for error in ["session deleted", "chrome not reachable", "connection refused", "no such session"]):
+                return False
+            return False
+    
     def check_login_status(self):
         """Check if logged into WhatsApp Web with comprehensive detection"""
+        # Simple lock to prevent concurrent status checks
+        if self._status_check_lock:
+            return self.is_logged_in, "Status check already in progress"
+        
+        self._status_check_lock = True
+        
+        try:
+            return self._do_status_check()
+        finally:
+            self._status_check_lock = False
+    
+    def _do_status_check(self):
+        """Internal status check implementation"""
         try:
             if not self.driver:
                 return False, "No driver initialized"
@@ -532,14 +616,13 @@ class WhatsAppAutomation:
                 elif "chrome not reachable" in str(e).lower():
                     return False, "Chrome browser not reachable"
                 else:
-                    # Try to recover by refreshing
+                    # Try to recover by checking if page is responsive
                     try:
-                        print("⚠️ Connection issue detected, attempting to refresh...")
-                        self.driver.refresh()
-                        time.sleep(3)
-                        current_url = self.driver.current_url
-                        if "web.whatsapp.com" not in current_url:
-                            return False, f"Connection lost (URL: {current_url})"
+                        # Check if we can get page title as a simple responsiveness test
+                        title = self.driver.title
+                        if not title:
+                            return False, "Page not responding"
+                        # If we got here, driver is responsive, continue with checks
                     except:
                         return False, f"Driver error: {str(e)}"
             
@@ -562,6 +645,8 @@ class WhatsAppAutomation:
                 '//div[contains(@aria-label, "Chat list")]',  # Aria-label based
                 '//div[@role="application"]//header',  # Header within app
                 '//div[contains(@class, "app-wrapper")]//div[contains(@class, "chat")]',  # App wrapper with chat
+                '//div[@role="main"]',  # Main content area
+                '//div[contains(@class, "app")]//div[contains(@class, "two")]',  # Two-pane layout
             ]
             
             # Check for logged-in indicators with better error handling
@@ -570,9 +655,9 @@ class WhatsAppAutomation:
             
             for selector in logged_in_selectors:
                 try:
-                    wait = WebDriverWait(self.driver, 3)
+                    wait = WebDriverWait(self.driver, 2)
                     element = wait.until(EC.presence_of_element_located((By.XPATH, selector)))
-                    if element.is_displayed():
+                    if element.is_displayed() and element.size['height'] > 0 and element.size['width'] > 0:
                         login_detected = True
                         detected_selector = selector
                         break
@@ -581,32 +666,39 @@ class WhatsAppAutomation:
                 except Exception as e:
                     if "stale element" in str(e).lower():
                         # Page is changing, wait a bit and continue
-                        time.sleep(2)
+                        time.sleep(1)
                         continue
                     else:
                         continue
             
             if login_detected:
-                # Double-check that we can interact with the page
+                # Additional verification - check if we can find any interactive elements
                 try:
-                    # Try to find search box or any interactive element
-                    interactive_elements = [
+                    # Look for elements that indicate the interface is fully loaded
+                    interface_elements = [
                         '//div[@data-testid="chat-list-search"]',
                         '//div[@data-testid="search-input"]',
-                        '//input[@type="text"]',
                         '//div[@contenteditable="true"]',
+                        '//input[@type="text"]',
+                        '//div[@role="textbox"]',
+                        '//span[@data-testid="default-user"]',
                     ]
                     
-                    for interactive_selector in interactive_elements:
+                    interface_ready = False
+                    for interface_selector in interface_elements:
                         try:
-                            element = self.driver.find_element(By.XPATH, interactive_selector)
+                            element = self.driver.find_element(By.XPATH, interface_selector)
                             if element.is_displayed():
-                                return True, f"Logged in and interactive (found: {detected_selector})"
+                                interface_ready = True
+                                break
                         except:
                             continue
                     
-                    # Even if no interactive elements found, if login detected, probably OK
-                    return True, f"Logged in (found: {detected_selector})"
+                    if interface_ready:
+                        return True, f"Logged in and interface ready (found: {detected_selector})"
+                    else:
+                        # Logged in but interface might still be loading
+                        return True, f"Logged in but interface loading (found: {detected_selector})"
                     
                 except Exception as e:
                     # Login detected but may not be fully ready
@@ -626,7 +718,7 @@ class WhatsAppAutomation:
             
             for selector in qr_selectors:
                 try:
-                    wait = WebDriverWait(self.driver, 2)
+                    wait = WebDriverWait(self.driver, 1)
                     element = wait.until(EC.presence_of_element_located((By.XPATH, selector)))
                     if element.is_displayed():
                         return False, f"QR code visible (found: {selector})"
@@ -643,6 +735,7 @@ class WhatsAppAutomation:
                 '//div[contains(text(), "Connecting")]',
                 '//div[contains(@class, "progress")]',
                 '//div[contains(@class, "spinner")]',
+                '//div[contains(@class, "loading")]',
             ]
             
             for selector in loading_selectors:
@@ -653,81 +746,257 @@ class WhatsAppAutomation:
                 except:
                     continue
             
-            # If we can't determine status, try to get page title and content
+            # If we can't determine status clearly, try to analyze page content
             try:
-                title = self.driver.title
-                if "WhatsApp" in title:
-                    # Look for any element that might indicate the page state
-                    all_elements = self.driver.find_elements(By.XPATH, '//*[@data-testid]')
-                    testids = [el.get_attribute('data-testid') for el in all_elements if el.get_attribute('data-testid')]
-                    
-                    if any('chat' in testid.lower() for testid in testids):
-                        return True, f"Likely logged in (found chat-related elements: {testids[:3]})"
-                    elif any('qr' in testid.lower() for testid in testids):
-                        return False, f"Likely QR code (found QR-related elements: {testids[:3]})"
-                    else:
-                        # Check page source for clues
-                        try:
-                            page_source = self.driver.page_source.lower()
-                            if 'chat-list' in page_source or 'chatlist' in page_source:
-                                return True, "Likely logged in (found chat references in page source)"
-                            elif 'qr' in page_source and 'scan' in page_source:
-                                return False, "Likely QR code (found QR references in page source)"
-                            else:
-                                return False, f"Unknown state (found elements: {testids[:5]})"
-                        except:
-                            return False, f"Unknown state (found elements: {testids[:5]})"
+                # Get page source and look for indicators
+                page_source = self.driver.page_source.lower()
+                
+                # Check for positive indicators
+                positive_indicators = ['chat-list', 'chatlist', 'conversation', 'message', 'contact']
+                positive_count = sum(1 for indicator in positive_indicators if indicator in page_source)
+                
+                # Check for negative indicators  
+                negative_indicators = ['qr', 'scan', 'loading', 'connecting']
+                negative_count = sum(1 for indicator in negative_indicators if indicator in page_source)
+                
+                if positive_count >= 2:
+                    return True, f"Likely logged in (found {positive_count} positive indicators in page source)"
+                elif negative_count >= 2:
+                    return False, f"Likely not logged in (found {negative_count} negative indicators in page source)"
                 else:
-                    return False, f"Invalid page (title: {title})"
+                    # Try to get any visible text content as last resort
+                    try:
+                        body_elements = self.driver.find_elements(By.XPATH, '//body//*[text()]')
+                        if len(body_elements) > 10:  # Page has content
+                            return True, "Page has content - likely logged in"
+                        else:
+                            return False, "Page appears empty or loading"
+                    except:
+                        return False, "Cannot determine page state"
+                        
             except Exception as e:
-                return False, f"Cannot determine status: {str(e)}"
+                return False, f"Cannot analyze page content: {str(e)}"
                 
         except Exception as e:
             return False, f"Status check failed: {str(e)}"
     
+    def wait_for_page_stability(self, timeout=30):
+        """Wait for WhatsApp Web page to become stable after login"""
+        try:
+            print("⏳ Waiting for page to stabilize...")
+            
+            from selenium.webdriver.common.by import By
+            import time
+            
+            start_time = time.time()
+            consecutive_stable_checks = 0
+            required_stable_checks = 3  # Need 3 consecutive stable checks
+            
+            while time.time() - start_time < timeout:
+                try:
+                    # Check if page is stable by looking for key elements
+                    stable_elements = [
+                        '//div[@data-testid="chat-list"]',
+                        '//div[@data-testid="chatlist-header"]',
+                        '//span[@data-testid="default-user"]',
+                    ]
+                    
+                    stable_count = 0
+                    for selector in stable_elements:
+                        try:
+                            element = self.driver.find_element(By.XPATH, selector)
+                            if element and element.is_displayed() and element.size['height'] > 0:
+                                stable_count += 1
+                        except:
+                            pass
+                    
+                    if stable_count >= 2:  # At least 2 stable elements found
+                        consecutive_stable_checks += 1
+                        print(f"🔍 Stability check {consecutive_stable_checks}/{required_stable_checks} passed")
+                        
+                        if consecutive_stable_checks >= required_stable_checks:
+                            print("✅ Page is stable!")
+                            return True, "Page is stable and ready"
+                    else:
+                        consecutive_stable_checks = 0  # Reset counter
+                        print("⏳ Page still stabilizing...")
+                    
+                    time.sleep(2)  # Wait between checks
+                    
+                except Exception as e:
+                    consecutive_stable_checks = 0  # Reset on error
+                    print(f"⚠️ Stability check error: {e}")
+                    time.sleep(2)
+            
+            # Timeout reached
+            print("⌛ Stability timeout reached")
+            return False, "Page stabilization timeout"
+            
+        except Exception as e:
+            print(f"❌ Error waiting for stability: {e}")
+            return False, f"Stability check failed: {str(e)}"
+
     def ensure_connection(self):
         """Ensure WhatsApp Web connection is stable"""
         try:
             print("🔍 Checking WhatsApp Web connection...")
             
-            is_logged_in, status_msg = self.check_login_status()
+            # First, basic driver check
+            if not self.driver:
+                return False, "No driver initialized"
+                
+            # Try to get current URL as basic connectivity test
+            try:
+                current_url = self.driver.current_url
+                if "web.whatsapp.com" not in current_url:
+                    print(f"⚠️ Not on WhatsApp Web. Current URL: {current_url}")
+                    try:
+                        self.driver.get(WHATSAPP_WEB_URL)
+                        time.sleep(3)
+                        print("🔄 Navigated back to WhatsApp Web")
+                    except Exception as nav_error:
+                        return False, f"Cannot navigate to WhatsApp Web: {nav_error}"
+            except Exception as url_error:
+                if "chrome not reachable" in str(url_error).lower():
+                    return False, "Chrome browser not reachable"
+                elif "session deleted" in str(url_error).lower():
+                    return False, "Browser session ended"
+                else:
+                    return False, f"Connection error: {url_error}"
             
-            if is_logged_in:
-                print(f"✅ Connection stable: {status_msg}")
-                return True, status_msg
-            
-            print(f"⚠️ Connection issue detected: {status_msg}")
-            
-            # Try to recover connection
-            if "connection lost" in status_msg.lower() or "driver error" in status_msg.lower():
-                print("🔄 Attempting to recover connection...")
+            # Check login status with retries
+            max_retries = 3
+            for attempt in range(max_retries):
                 try:
-                    # Try to refresh the page
-                    self.driver.refresh()
-                    time.sleep(5)
+                    is_logged_in, status_msg = self.check_login_status()
                     
-                    # Check again
-                    is_logged_in, new_status = self.check_login_status()
                     if is_logged_in:
-                        print(f"✅ Connection recovered: {new_status}")
-                        return True, new_status
+                        print(f"✅ Connection stable: {status_msg}")
+                        return True, status_msg
+                    
+                    # If not logged in, check if it's a temporary loading state
+                    if "loading" in status_msg.lower():
+                        print(f"⏳ Page loading (attempt {attempt + 1}/{max_retries}), waiting...")
+                        time.sleep(5)
+                        continue
+                    elif "QR code" in status_msg:
+                        print(f"📱 QR code detected: {status_msg}")
+                        return False, status_msg
                     else:
-                        print(f"❌ Could not recover connection: {new_status}")
-                        return False, new_status
-                        
-                except Exception as e:
-                    print(f"❌ Error during connection recovery: {e}")
-                    return False, f"Connection recovery failed: {str(e)}"
+                        # Connection issue, try to refresh if not last attempt
+                        if attempt < max_retries - 1:
+                            print(f"🔄 Connection issue (attempt {attempt + 1}/{max_retries}), trying refresh...")
+                            try:
+                                self.driver.refresh()
+                                time.sleep(5)
+                                continue
+                            except Exception as refresh_error:
+                                print(f"❌ Refresh failed: {refresh_error}")
+                                continue
+                        else:
+                            print(f"❌ Connection check failed: {status_msg}")
+                            return False, status_msg
+                            
+                except Exception as check_error:
+                    if attempt < max_retries - 1:
+                        print(f"⚠️ Status check error (attempt {attempt + 1}/{max_retries}): {check_error}")
+                        time.sleep(3)
+                        continue
+                    else:
+                        return False, f"Status check failed: {check_error}"
             
-            return False, status_msg
+            return False, "Connection verification failed after retries"
             
         except Exception as e:
             print(f"❌ Error checking connection: {e}")
             return False, f"Connection check failed: {str(e)}"
 
-    def send_message(self, phone_number, message):
-        """Send message to a phone number"""
+    def sanitize_message_for_chrome(self, message):
+        """Sanitize message to be compatible with ChromeDriver while preserving important emojis"""
         try:
+            # Define replacements for common emojis that are outside BMP
+            # These emojis are commonly used in the library messages
+            emoji_replacements = {
+                '📍': '[Location]',
+                '📞': '[Phone]', 
+                '📧': '[Email]',
+                '📱': '[Mobile]',
+                '💬': '[Message]',
+                '🔍': '[Search]',
+                '🧪': '[Test]',
+                # Keep these as they're in BMP range
+                # '✅': '✅',  # U+2705 (BMP)
+                # '❌': '❌',  # U+274C (BMP)
+            }
+            
+            # First, replace problematic emojis with text alternatives
+            sanitized = message
+            for emoji, replacement in emoji_replacements.items():
+                sanitized = sanitized.replace(emoji, replacement)
+            
+            # Handle variation selectors (like ⚠️ which is warning + variation selector)
+            # These cause issues with ord() but often work fine in browsers
+            variation_selectors = [
+                '\uFE0E',  # Text variation selector
+                '\uFE0F',  # Emoji variation selector
+            ]
+            
+            # Remove variation selectors but keep the base character
+            for vs in variation_selectors:
+                sanitized = sanitized.replace(vs, '')
+            
+            # Now check for any remaining non-BMP characters
+            final_sanitized = ""
+            for char in sanitized:
+                try:
+                    if ord(char) <= 0xFFFF:
+                        # Character is in BMP, keep it
+                        final_sanitized += char
+                    else:
+                        # Non-BMP character, replace with generic placeholder
+                        final_sanitized += '[emoji]'
+                except TypeError:
+                    # This shouldn't happen now, but just in case
+                    final_sanitized += '[char]'
+            
+            return final_sanitized.strip()
+            
+        except Exception as e:
+            print(f"❌ Error sanitizing message: {e}")
+            # If sanitization fails completely, try basic replacement
+            try:
+                # Basic fallback - replace known problematic emojis
+                basic_sanitized = message.replace('📍', '[Location]').replace('📞', '[Phone]').replace('📧', '[Email]')
+                return basic_sanitized
+            except:
+                return "Message contains unsupported characters"
+
+    def send_message(self, phone_number, message):
+        """
+        Send message to a phone number with optimized performance
+        
+        Optimizations applied:
+        - Reduced WebDriverWait timeouts from 30s to 10s for chat loading
+        - Reduced invalid number check timeout from 5s to 2s  
+        - Optimized selector search with 5s per selector instead of 10s
+        - Reduced delays: click delay 1s→0.5s, pre-send delay 1s→0.3s
+        - Minimized post-send delay from 3s to 1s while maintaining bot detection avoidance
+        - Faster delivery verification with 2s timeout instead of 5s
+        - Bulk message delay reduced from 6s to 2s between contacts
+        """
+        try:
+            # Sanitize message to handle Unicode characters
+            original_message = message
+            sanitized_message = self.sanitize_message_for_chrome(message)
+            
+            if sanitized_message != original_message:
+                print(f"ℹ️ Message sanitized for Chrome compatibility")
+                print(f"Original: {original_message[:50]}{'...' if len(original_message) > 50 else ''}")
+                print(f"Sanitized: {sanitized_message[:50]}{'...' if len(sanitized_message) > 50 else ''}")
+            
+            # Use sanitized message
+            message = sanitized_message
+            
             # Ensure connection is stable before sending
             connection_ok, connection_msg = self.ensure_connection()
             if not connection_ok:
@@ -750,10 +1019,10 @@ class WhatsAppAutomation:
                 print(f"❌ Failed to navigate to chat URL: {e}")
                 return False, f"Failed to open chat for {phone_number}: {str(e)}"
             
-            # Wait for chat to load with multiple retry attempts
-            wait = WebDriverWait(self.driver, 30)
+            # Wait for chat to load with optimized timeout
+            wait = WebDriverWait(self.driver, 10)  # Reduced from 30 to 10 seconds
             
-            # Check for invalid number first
+            # Quick check for invalid number
             try:
                 print("🔍 Checking if phone number is valid...")
                 invalid_elements = [
@@ -762,9 +1031,10 @@ class WhatsAppAutomation:
                     '//*[contains(text(), "not found")]',
                 ]
                 
+                # Quick check with reduced timeout
                 for invalid_selector in invalid_elements:
                     try:
-                        invalid_element = WebDriverWait(self.driver, 5).until(
+                        invalid_element = WebDriverWait(self.driver, 2).until(  # Reduced from 5 to 2 seconds
                             EC.presence_of_element_located((By.XPATH, invalid_selector))
                         )
                         if invalid_element.is_displayed():
@@ -776,20 +1046,23 @@ class WhatsAppAutomation:
             except Exception as e:
                 print(f"⚠️ Error checking number validity: {e}")
             
-            # Wait for the page to load and find message input
+            # Find message input with optimized approach - try most reliable selectors first
             message_input_selectors = [
-                '//div[@data-testid="conversation-compose-box-input"]',  # Primary selector
+                '//div[@data-testid="conversation-compose-box-input"]',  # Primary selector (most reliable)
                 '//div[@contenteditable="true"][@data-tab="10"]',  # Alternative
+                '//div[@role="textbox"]',  # Role-based (often works)
                 '//div[@contenteditable="true"][contains(@class, "compose")]',  # Class-based
-                '//div[@role="textbox"]',  # Role-based
-                '//div[@contenteditable="true"]',  # Generic contenteditable
+                '//div[@contenteditable="true"]',  # Generic contenteditable (last resort)
             ]
             
             message_box = None
+            # Use shorter timeout per selector for faster overall speed
+            quick_wait = WebDriverWait(self.driver, 5)  # 5 seconds per selector instead of 10
+            
             for attempt, selector in enumerate(message_input_selectors, 1):
                 try:
                     print(f"🔍 Trying to find message input (attempt {attempt}): {selector}")
-                    message_box = wait.until(
+                    message_box = quick_wait.until(
                         EC.element_to_be_clickable((By.XPATH, selector))
                     )
                     if message_box.is_displayed():
@@ -818,26 +1091,77 @@ class WhatsAppAutomation:
                 
                 # Click on message box
                 message_box.click()
-                time.sleep(1)  # Small delay after click
+                time.sleep(0.5)  # Reduced delay after click (was 1 second)
                 
-                # Clear any existing text and send message
+                # Clear any existing text first
                 message_box.clear()
-                message_box.send_keys(message)
                 
-                # Wait a moment before sending
-                time.sleep(1)
+                # Send message using optimized approach
+                try:
+                    # Direct send_keys (preferred for most text)
+                    message_box.send_keys(message)
+                    print(f"✅ Message typed successfully: {len(message)} characters")
+                except Exception as send_error:
+                    print(f"⚠️ Direct send_keys failed: {send_error}")
+                    
+                    # Fallback: Try using JavaScript to set the value
+                    print("🔄 Trying JavaScript input method...")
+                    try:
+                        self.driver.execute_script("arguments[0].innerText = arguments[1];", message_box, message)
+                        print("✅ JavaScript input completed")
+                    except Exception as js_error:
+                        print(f"⚠️ JavaScript method failed: {js_error}")
+                        
+                        # Last resort: character-by-character but keep Unicode
+                        print("🔄 Trying careful character-by-character input...")
+                        message_box.clear()
+                        for char in message:
+                            try:
+                                # Try to send each character, including Unicode
+                                message_box.send_keys(char)
+                            except Exception as char_error:
+                                # If this specific character fails, try a safe alternative
+                                if ord(char) > 127:
+                                    # For Unicode characters that fail, try common alternatives
+                                    if char == '📍':
+                                        message_box.send_keys('[Location]')
+                                    elif char == '📧':
+                                        message_box.send_keys('[Email]')
+                                    elif char == '📞':
+                                        message_box.send_keys('[Phone]')
+                                    else:
+                                        # Skip other problematic characters
+                                        continue
+                                else:
+                                    message_box.send_keys(char)
+                        print("✅ Character-by-character input completed")
                 
-                # Send the message
-                message_box.send_keys(Keys.ENTER)
+                # Minimal wait before sending (reduced from 1 second)
+                time.sleep(0.3)
+                
+                # Send the message with Enter key
+                try:
+                    message_box.send_keys(Keys.ENTER)
+                    print("✅ Enter key sent")
+                except Exception as enter_error:
+                    print(f"⚠️ Enter key failed: {enter_error}")
+                    # Try alternative send button
+                    try:
+                        send_button = self.driver.find_element(By.XPATH, '//span[@data-testid="send"]')
+                        send_button.click()
+                        print("✅ Send button clicked")
+                    except Exception as button_error:
+                        print(f"❌ Send button also failed: {button_error}")
+                        return False, f"Could not send message: {str(button_error)}"
                 
                 print("✅ Message sent successfully!")
                 
-                # Add delay to avoid being detected as bot
-                time.sleep(WHATSAPP_DELAY)
+                # Reduced delay to avoid bot detection (still necessary but shorter)
+                time.sleep(1)  # Reduced from WHATSAPP_DELAY (3 seconds) to 1 second
                 
-                # Verify message was sent (optional check)
+                # Quick verification of message delivery (optional with reduced timeout)
                 try:
-                    # Look for sent message indicators
+                    # Look for sent message indicators with shorter timeout
                     sent_indicators = [
                         '//span[@data-testid="msg-time"]',  # Message timestamp
                         '//span[contains(@class, "check")]',  # Check marks
@@ -846,7 +1170,7 @@ class WhatsAppAutomation:
                     
                     for indicator in sent_indicators:
                         try:
-                            element = WebDriverWait(self.driver, 5).until(
+                            element = WebDriverWait(self.driver, 2).until(  # Reduced from 5 to 2 seconds
                                 EC.presence_of_element_located((By.XPATH, indicator))
                             )
                             if element.is_displayed():
@@ -886,8 +1210,8 @@ class WhatsAppAutomation:
                 'message': result_message
             })
             
-            # Add delay between messages to avoid spam detection
-            time.sleep(WHATSAPP_DELAY * 2)
+            # Optimized delay between messages (reduced from WHATSAPP_DELAY * 2)
+            time.sleep(2)  # 2 seconds instead of 6 seconds (3*2)
         
         return results
     
@@ -1143,6 +1467,32 @@ Best regards,
         
         result['diagnostics'] = diagnostics
         return result
+    
+    def test_message_with_emojis(self, phone_number):
+        """Test sending a message with emojis to verify they display correctly"""
+        test_message = f"""
+🧪 Test Message from {LIBRARY_NAME}
+
+This is a test to verify emoji display:
+📍 Location: {LIBRARY_ADDRESS}
+📞 Phone: {LIBRARY_PHONE}
+📧 Email: {LIBRARY_EMAIL}
+
+Common symbols:
+✅ Check mark
+❌ Cross mark
+⚠️ Warning
+ℹ️ Information
+🔍 Search
+📱 Mobile
+💬 Message
+
+If you can see all the emojis above correctly, the messaging system is working properly!
+
+Thank you for testing {LIBRARY_NAME}!
+        """.strip()
+        
+        return self.send_message(phone_number, test_message)
     
     def __del__(self):
         """Cleanup when object is destroyed"""

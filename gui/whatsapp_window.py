@@ -22,15 +22,35 @@ class WhatsAppWindow:
         """Setup WhatsApp automation window"""
         self.window = tk.Toplevel(self.parent)
         self.window.title("WhatsApp Automation")
-        self.window.geometry("800x600")
+        self.window.geometry("900x700")
+        self.window.minsize(800, 600)  # Set minimum size
         self.window.grab_set()  # Make window modal
+        
+        # Configure window to be resizable
+        self.window.rowconfigure(0, weight=1)
+        self.window.columnconfigure(0, weight=1)
+        
+        # Bind keyboard shortcuts
+        self.window.bind('<Control-i>', lambda e: self.initialize_whatsapp())
+        self.window.bind('<Control-r>', lambda e: self.check_status())
+        self.window.bind('<F5>', lambda e: self.force_status_check())
+        self.window.bind('<Control-q>', lambda e: self.close_whatsapp())
+        
+        # Allow window to be closed properly
+        self.window.protocol("WM_DELETE_WINDOW", self.on_window_close)
         
         # Start periodic status checker
         self.start_status_monitor()
         
+        # Create main frame
+        main_frame = ttk.Frame(self.window)
+        main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        main_frame.rowconfigure(0, weight=1)
+        main_frame.columnconfigure(0, weight=1)
+        
         # Create notebook for different functions
-        notebook = ttk.Notebook(self.window)
-        notebook.pack(fill='both', expand=True, padx=10, pady=10)
+        notebook = ttk.Notebook(main_frame)
+        notebook.pack(fill='both', expand=True)
         
         # Login tab
         self.create_login_tab(notebook)
@@ -46,45 +66,92 @@ class WhatsAppWindow:
     
     def start_status_monitor(self):
         """Start periodic status monitoring"""
+        self.last_status = None
+        self.status_check_count = 0
+        self.connection_retry_count = 0
+        self.is_initializing = False  # Track initialization state
+        
         def monitor():
             if hasattr(self, 'window') and self.window.winfo_exists():
-                # Only check if we have a driver initialized
-                if self.whatsapp.driver:
-                    try:
-                        # Use the comprehensive status check
-                        is_logged_in, status_message = self.whatsapp.check_login_status()
-                        
-                        # Update status based on result
-                        if is_logged_in and not self.whatsapp.is_logged_in:
-                            self.whatsapp.is_logged_in = True
-                            self.status_var.set("Connected")
-                            self.log_message("✅ Login detected - WhatsApp Web connected!")
-                        elif not is_logged_in and self.whatsapp.is_logged_in:
+                # Only check if we have a driver initialized and not currently initializing
+                if self.whatsapp.driver and not self.is_initializing:
+                    # First check if driver is still valid
+                    if not self.whatsapp.is_driver_valid():
+                        if self.whatsapp.is_logged_in:
                             self.whatsapp.is_logged_in = False
-                            if "QR code" in status_message:
-                                self.status_var.set("Waiting for QR scan")
-                                # Don't log every time to avoid spam
-                            else:
-                                self.status_var.set("Connection lost")
-                                self.log_message(f"❌ Connection lost: {status_message}")
+                            self.status_var.set("Browser crashed")
+                            self.log_message("❌ Browser session crashed")
+                            self.last_status = "crashed"
+                    else:
+                        try:
+                            # Use the comprehensive status check
+                            is_logged_in, status_message = self.whatsapp.check_login_status()
+                            
+                            # Only log status changes, not repeated same status
+                            current_status = "connected" if is_logged_in else "disconnected"
+                            
+                            if current_status != self.last_status:
+                                if is_logged_in and not self.whatsapp.is_logged_in:
+                                    self.whatsapp.is_logged_in = True
+                                    self.status_var.set("Connected")
+                                    self.log_message("✅ Login detected - WhatsApp Web connected!")
+                                    self.connection_retry_count = 0
+                                elif not is_logged_in:
+                                    if "QR code" in status_message:
+                                        if self.whatsapp.is_logged_in:
+                                            self.whatsapp.is_logged_in = False
+                                            self.status_var.set("Waiting for QR scan")
+                                            self.log_message("📱 Please scan QR code to login")
+                                            self.connection_retry_count = 0
+                                    elif "loading" in status_message.lower() or "page loading" in status_message.lower():
+                                        # Don't change status for loading states if we think we're connected
+                                        if not self.whatsapp.is_logged_in:
+                                            self.status_var.set("Loading...")
+                                    else:
+                                        # Only report connection issues after multiple consecutive failures
+                                        self.connection_retry_count += 1
+                                        if self.connection_retry_count >= 5:  # 5 consecutive failures = 25 seconds
+                                            if self.whatsapp.is_logged_in:
+                                                self.whatsapp.is_logged_in = False
+                                                self.status_var.set("Connection issues")
+                                                self.log_message(f"⚠️ Multiple connection check failures: {status_message}")
+                                        # Don't immediately report as disconnected - wait for multiple failures
+                                                # Don't auto-reconnect if initializing to avoid conflicts
+                                                if not self.is_initializing:
+                                                    threading.Thread(target=self.initialize_whatsapp, daemon=True).start()
                                 
-                    except Exception as e:
-                        # Driver might be closed or other error
-                        if "session deleted" in str(e).lower():
-                            self.whatsapp.is_logged_in = False
-                            self.status_var.set("Browser closed")
-                            self.log_message("Browser session ended")
+                                self.last_status = current_status
+                                self.status_check_count += 1
+                                
+                        except Exception as e:
+                            # Handle driver errors gracefully
+                            error_str = str(e).lower()
+                            if any(error in error_str for error in ["session deleted", "chrome not reachable", "connection refused"]):
+                                if self.whatsapp.is_logged_in:
+                                    self.whatsapp.is_logged_in = False
+                                    self.status_var.set("Browser crashed")
+                                    self.log_message("❌ Browser session ended")
+                                    self.last_status = "crashed"
+                elif not self.whatsapp.driver and not self.is_initializing:
+                    # No driver and not initializing - show as not connected
+                    if self.last_status != "no_driver":
+                        self.status_var.set("Not initialized")
+                        self.last_status = "no_driver"
                 
-                # Schedule next check
-                self.window.after(5000, monitor)  # Check every 5 seconds
+                # Schedule next check with longer interval to reduce conflicts
+                self.window.after(15000, monitor)  # Check every 15 seconds to reduce conflicts
         
         # Start the monitor
-        self.window.after(1000, monitor)  # Start after 1 second
+        self.window.after(2000, monitor)  # Start after 2 seconds
     
     def create_login_tab(self, parent):
         """Create WhatsApp login tab"""
         login_frame = ttk.Frame(parent)
         parent.add(login_frame, text="Login")
+        
+        # Configure login frame grid
+        login_frame.rowconfigure(4, weight=1)  # Log frame gets extra space
+        login_frame.columnconfigure(0, weight=1)
         
         # Instructions
         instructions = """
@@ -98,89 +165,149 @@ WhatsApp Web Login Instructions:
 Note: Keep this window open while using WhatsApp automation.
         """.strip()
         
-        ttk.Label(login_frame, text=instructions, justify='left', font=('Arial', 10)).pack(pady=20)
+        instructions_frame = ttk.Frame(login_frame)
+        instructions_frame.grid(row=0, column=0, sticky='ew', pady=(10, 20), padx=10)
+        instructions_frame.columnconfigure(0, weight=1)
+        
+        # Add keyboard shortcuts info
+        shortcuts_text = "Keyboard shortcuts: Ctrl+I (Initialize) | Ctrl+R (Check Status) | F5 (Force Refresh) | Ctrl+Q (Close WhatsApp)"
+        shortcuts_frame = ttk.Frame(instructions_frame)
+        shortcuts_frame.pack(fill='x', pady=(10, 0))
+        
+        ttk.Label(shortcuts_frame, text=shortcuts_text, font=('Arial', 8), 
+                 foreground='gray').pack(fill='x')
         
         # Status display
         self.status_var = tk.StringVar(value="Not connected")
-        status_frame = ttk.Frame(login_frame)
-        status_frame.pack(pady=10)
+        status_frame = ttk.LabelFrame(login_frame, text="Connection Status", padding=10)
+        status_frame.grid(row=1, column=0, sticky='ew', pady=10, padx=10)
+        status_frame.columnconfigure(1, weight=1)
         
-        ttk.Label(status_frame, text="Status:").pack(side='left')
+        ttk.Label(status_frame, text="Status:", font=('Arial', 10, 'bold')).grid(row=0, column=0, sticky='w')
         status_label = ttk.Label(status_frame, textvariable=self.status_var, font=('Arial', 10, 'bold'))
-        status_label.pack(side='left', padx=5)
+        status_label.grid(row=0, column=1, sticky='w', padx=(10, 0))
         
-        # Buttons
-        button_frame = ttk.Frame(login_frame)
-        button_frame.pack(pady=20)
+        # Buttons - Main controls
+        button_frame = ttk.LabelFrame(login_frame, text="Main Controls", padding=10)
+        button_frame.grid(row=2, column=0, sticky='ew', pady=10, padx=10)
+        button_frame.columnconfigure((0, 1, 2, 3), weight=1)
         
-        ttk.Button(button_frame, text="Initialize WhatsApp", command=self.initialize_whatsapp).pack(side='left', padx=5)
-        ttk.Button(button_frame, text="Check Status", command=self.check_status).pack(side='left', padx=5)
-        ttk.Button(button_frame, text="Force Refresh", command=self.force_status_check).pack(side='left', padx=5)
-        ttk.Button(button_frame, text="Close WhatsApp", command=self.close_whatsapp).pack(side='left', padx=5)
+        init_btn = ttk.Button(button_frame, text="Initialize WhatsApp", command=self.initialize_whatsapp)
+        init_btn.grid(row=0, column=0, sticky='ew', padx=5, pady=5)
+        self.create_tooltip(init_btn, "Start WhatsApp Web and prepare for automation")
+        
+        status_btn = ttk.Button(button_frame, text="Check Status", command=self.check_status)
+        status_btn.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
+        self.create_tooltip(status_btn, "Check current WhatsApp connection status")
+        
+        refresh_btn = ttk.Button(button_frame, text="Force Refresh", command=self.force_status_check)
+        refresh_btn.grid(row=0, column=2, sticky='ew', padx=5, pady=5)
+        self.create_tooltip(refresh_btn, "Force a detailed status check with logging")
+        
+        close_btn = ttk.Button(button_frame, text="Close WhatsApp", command=self.close_whatsapp)
+        close_btn.grid(row=0, column=3, sticky='ew', padx=5, pady=5)
+        self.create_tooltip(close_btn, "Close WhatsApp Web browser session")
         
         # Diagnostic frame
-        diagnostic_frame = ttk.Frame(login_frame)
-        diagnostic_frame.pack(pady=10)
+        diagnostic_frame = ttk.LabelFrame(login_frame, text="Diagnostic Tools", padding=10)
+        diagnostic_frame.grid(row=3, column=0, sticky='ew', pady=10, padx=10)
+        diagnostic_frame.columnconfigure((0, 1), weight=1)
         
-        ttk.Button(diagnostic_frame, text="Test Chrome Installation", command=self.test_chrome).pack(side='left', padx=5)
-        ttk.Button(diagnostic_frame, text="Clear Session Data", command=self.clear_session).pack(side='left', padx=5)
+        test_btn = ttk.Button(diagnostic_frame, text="Test Chrome Installation", command=self.test_chrome)
+        test_btn.grid(row=0, column=0, sticky='ew', padx=5, pady=5)
+        self.create_tooltip(test_btn, "Check if Chrome is properly installed")
+        
+        clear_btn = ttk.Button(diagnostic_frame, text="Clear Session Data", command=self.clear_session)
+        clear_btn.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
+        self.create_tooltip(clear_btn, "Clear saved login data (requires re-scanning QR code)")
         
         # Log display
-        log_frame = ttk.LabelFrame(login_frame, text="Log", padding=10)
-        log_frame.pack(fill='both', expand=True, pady=20)
+        log_frame = ttk.LabelFrame(login_frame, text="Activity Log", padding=10)
+        log_frame.grid(row=4, column=0, sticky='nsew', pady=10, padx=10)
+        log_frame.rowconfigure(0, weight=1)
+        log_frame.columnconfigure(0, weight=1)
         
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=10, state='disabled')
-        self.log_text.pack(fill='both', expand=True)
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=10, state='disabled', wrap='word')
+        self.log_text.grid(row=0, column=0, sticky='nsew')
     
     def create_reminders_tab(self, parent):
         """Create subscription reminders tab"""
         reminders_frame = ttk.Frame(parent)
         parent.add(reminders_frame, text="Subscription Reminders")
         
+        # Configure frame grid
+        reminders_frame.rowconfigure(2, weight=1)  # Preview gets extra space
+        reminders_frame.columnconfigure(0, weight=1)
+        
         # Options frame
         options_frame = ttk.LabelFrame(reminders_frame, text="Reminder Options", padding=10)
-        options_frame.pack(fill='x', pady=10)
+        options_frame.grid(row=0, column=0, sticky='ew', pady=10, padx=10)
+        options_frame.columnconfigure(0, weight=1)
         
         # Days before expiry
-        ttk.Label(options_frame, text="Send reminders for subscriptions expiring in:").pack(anchor='w')
-        days_frame = ttk.Frame(options_frame)
-        days_frame.pack(fill='x', pady=5)
+        days_label_frame = ttk.Frame(options_frame)
+        days_label_frame.pack(fill='x', pady=5)
+        
+        ttk.Label(days_label_frame, text="Send reminders for subscriptions expiring in:").pack(anchor='w')
+        
+        days_input_frame = ttk.Frame(options_frame)
+        days_input_frame.pack(fill='x', pady=5)
         
         self.reminder_days_var = tk.StringVar(value="7")
-        tk.Spinbox(days_frame, from_=1, to=30, textvariable=self.reminder_days_var, width=10).pack(side='left')
-        ttk.Label(days_frame, text="days").pack(side='left', padx=5)
+        days_spinbox = tk.Spinbox(days_input_frame, from_=1, to=30, textvariable=self.reminder_days_var, 
+                                 width=10, font=('Arial', 10))
+        days_spinbox.pack(side='left')
+        ttk.Label(days_input_frame, text="days").pack(side='left', padx=5)
         
         # Preview frame
-        preview_frame = ttk.LabelFrame(reminders_frame, text="Preview", padding=10)
-        preview_frame.pack(fill='both', expand=True, pady=10)
+        preview_frame = ttk.LabelFrame(reminders_frame, text="Expiring Subscriptions Preview", padding=10)
+        preview_frame.grid(row=2, column=0, sticky='nsew', pady=10, padx=10)
+        preview_frame.rowconfigure(0, weight=1)
+        preview_frame.columnconfigure(0, weight=1)
+        
+        # Create frame for treeview and scrollbar
+        tree_frame = ttk.Frame(preview_frame)
+        tree_frame.grid(row=0, column=0, sticky='nsew')
+        tree_frame.rowconfigure(0, weight=1)
+        tree_frame.columnconfigure(0, weight=1)
         
         # Expiring subscriptions tree
         columns = ('Student', 'Mobile', 'Seat', 'Timeslot', 'Expiry Date', 'Days Left')
-        self.reminder_tree = ttk.Treeview(preview_frame, columns=columns, show='headings', height=8)
+        self.reminder_tree = ttk.Treeview(tree_frame, columns=columns, show='headings', height=8)
         
         for col in columns:
             self.reminder_tree.heading(col, text=col)
-            self.reminder_tree.column(col, width=100)
+            self.reminder_tree.column(col, width=120, minwidth=80)
         
-        scrollbar = ttk.Scrollbar(preview_frame, orient='vertical', command=self.reminder_tree.yview)
+        scrollbar = ttk.Scrollbar(tree_frame, orient='vertical', command=self.reminder_tree.yview)
         self.reminder_tree.configure(yscrollcommand=scrollbar.set)
         
-        self.reminder_tree.pack(side='left', fill='both', expand=True)
-        scrollbar.pack(side='right', fill='y')
+        self.reminder_tree.grid(row=0, column=0, sticky='nsew')
+        scrollbar.grid(row=0, column=1, sticky='ns')
         
         # Buttons
         button_frame = ttk.Frame(reminders_frame)
-        button_frame.pack(pady=10)
+        button_frame.grid(row=3, column=0, sticky='ew', pady=10, padx=10)
+        button_frame.columnconfigure((0, 1), weight=1)
         
-        ttk.Button(button_frame, text="Load Expiring Subscriptions", 
-                  command=self.load_expiring_subscriptions).pack(side='left', padx=5)
-        ttk.Button(button_frame, text="Send Reminders", 
-                  command=self.send_subscription_reminders).pack(side='left', padx=5)
+        load_btn = ttk.Button(button_frame, text="Load Expiring Subscriptions", 
+                             command=self.load_expiring_subscriptions)
+        load_btn.grid(row=0, column=0, sticky='ew', padx=5, pady=5)
+        self.create_tooltip(load_btn, "Load subscriptions that will expire soon")
+        
+        send_btn = ttk.Button(button_frame, text="Send Reminders", 
+                             command=self.send_subscription_reminders)
+        send_btn.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
+        self.create_tooltip(send_btn, "Send reminder messages to students with expiring subscriptions")
     
     def create_cancellations_tab(self, parent):
         """Create subscription cancellations tab"""
         cancellations_frame = ttk.Frame(parent)
         parent.add(cancellations_frame, text="Subscription Cancellations")
+        
+        # Configure frame grid
+        cancellations_frame.rowconfigure(3, weight=1)  # Preview gets extra space
+        cancellations_frame.columnconfigure(0, weight=1)
         
         # Instructions
         instructions = """
@@ -188,84 +315,153 @@ This feature sends cancellation notifications to students whose subscriptions ha
 The message includes readmission contact information and encourages them to return.
         """.strip()
         
-        ttk.Label(cancellations_frame, text=instructions, justify='left', 
-                 font=('Arial', 10), wraplength=700).pack(pady=10)
+        instructions_frame = ttk.Frame(cancellations_frame)
+        instructions_frame.grid(row=0, column=0, sticky='ew', pady=10, padx=10)
+        instructions_frame.columnconfigure(0, weight=1)
+        
+        ttk.Label(instructions_frame, text=instructions, justify='left', 
+                 font=('Arial', 10), wraplength=800).pack(fill='x')
         
         # Options frame
         options_frame = ttk.LabelFrame(cancellations_frame, text="Cancellation Options", padding=10)
-        options_frame.pack(fill='x', pady=10)
+        options_frame.grid(row=1, column=0, sticky='ew', pady=10, padx=10)
+        options_frame.columnconfigure(0, weight=1)
         
         # Days since expiry
-        ttk.Label(options_frame, text="Send cancellations for subscriptions expired within:").pack(anchor='w')
-        days_frame = ttk.Frame(options_frame)
-        days_frame.pack(fill='x', pady=5)
+        days_label_frame = ttk.Frame(options_frame)
+        days_label_frame.pack(fill='x', pady=5)
+        
+        ttk.Label(days_label_frame, text="Send cancellations for subscriptions expired within:").pack(anchor='w')
+        
+        days_input_frame = ttk.Frame(options_frame)
+        days_input_frame.pack(fill='x', pady=5)
         
         self.cancellation_days_var = tk.StringVar(value="7")
-        tk.Spinbox(days_frame, from_=1, to=30, textvariable=self.cancellation_days_var, width=10).pack(side='left')
-        ttk.Label(days_frame, text="days").pack(side='left', padx=5)
+        days_spinbox = tk.Spinbox(days_input_frame, from_=1, to=30, textvariable=self.cancellation_days_var, 
+                                 width=10, font=('Arial', 10))
+        days_spinbox.pack(side='left')
+        ttk.Label(days_input_frame, text="days").pack(side='left', padx=5)
         
         # Warning frame
-        warning_frame = ttk.Frame(options_frame)
+        warning_frame = ttk.LabelFrame(options_frame, text="⚠️ Important Warning", padding=10)
         warning_frame.pack(fill='x', pady=10)
         
-        warning_text = "⚠️ This will send cancellation messages to expired students. Use carefully!"
-        ttk.Label(warning_frame, text=warning_text, foreground='red', font=('Arial', 10, 'bold')).pack()
+        warning_text = "This will send cancellation messages to expired students. Use carefully!"
+        warning_label = ttk.Label(warning_frame, text=warning_text, foreground='red', 
+                                 font=('Arial', 10, 'bold'), wraplength=700)
+        warning_label.pack(fill='x')
         
         # Preview frame
-        preview_frame = ttk.LabelFrame(cancellations_frame, text="Expired Subscriptions", padding=10)
-        preview_frame.pack(fill='both', expand=True, pady=10)
+        preview_frame = ttk.LabelFrame(cancellations_frame, text="Expired Subscriptions Preview", padding=10)
+        preview_frame.grid(row=3, column=0, sticky='nsew', pady=10, padx=10)
+        preview_frame.rowconfigure(0, weight=1)
+        preview_frame.columnconfigure(0, weight=1)
+        
+        # Create frame for treeview and scrollbar
+        tree_frame = ttk.Frame(preview_frame)
+        tree_frame.grid(row=0, column=0, sticky='nsew')
+        tree_frame.rowconfigure(0, weight=1)
+        tree_frame.columnconfigure(0, weight=1)
         
         # Expired subscriptions tree
         columns = ('Student', 'Mobile', 'Seat', 'Timeslot', 'Expired Date', 'Days Expired')
-        self.cancellation_tree = ttk.Treeview(preview_frame, columns=columns, show='headings', height=8)
+        self.cancellation_tree = ttk.Treeview(tree_frame, columns=columns, show='headings', height=8)
         
         for col in columns:
             self.cancellation_tree.heading(col, text=col)
-            self.cancellation_tree.column(col, width=100)
+            self.cancellation_tree.column(col, width=120, minwidth=80)
         
-        scrollbar2 = ttk.Scrollbar(preview_frame, orient='vertical', command=self.cancellation_tree.yview)
+        scrollbar2 = ttk.Scrollbar(tree_frame, orient='vertical', command=self.cancellation_tree.yview)
         self.cancellation_tree.configure(yscrollcommand=scrollbar2.set)
         
-        self.cancellation_tree.pack(side='left', fill='both', expand=True)
-        scrollbar2.pack(side='right', fill='y')
+        self.cancellation_tree.grid(row=0, column=0, sticky='nsew')
+        scrollbar2.grid(row=0, column=1, sticky='ns')
         
         # Buttons
         button_frame = ttk.Frame(cancellations_frame)
-        button_frame.pack(pady=10)
+        button_frame.grid(row=4, column=0, sticky='ew', pady=10, padx=10)
+        button_frame.columnconfigure((0, 1), weight=1)
         
-        ttk.Button(button_frame, text="Load Expired Subscriptions", 
-                  command=self.load_expired_subscriptions).pack(side='left', padx=5)
-        ttk.Button(button_frame, text="Send Cancellation Messages", 
-                  command=self.send_cancellation_messages).pack(side='left', padx=5)
+        load_btn = ttk.Button(button_frame, text="Load Expired Subscriptions", 
+                             command=self.load_expired_subscriptions)
+        load_btn.grid(row=0, column=0, sticky='ew', padx=5, pady=5)
+        self.create_tooltip(load_btn, "Load subscriptions that have recently expired")
+        
+        send_btn = ttk.Button(button_frame, text="Send Cancellation Messages", 
+                             command=self.send_cancellation_messages)
+        send_btn.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
+        self.create_tooltip(send_btn, "Send cancellation notices to students with expired subscriptions")
     
     def create_custom_messages_tab(self, parent):
         """Create custom messages tab"""
         custom_frame = ttk.Frame(parent)
         parent.add(custom_frame, text="Custom Messages")
         
+        # Configure frame grid
+        custom_frame.rowconfigure(1, weight=1)  # Results frame gets extra space
+        custom_frame.columnconfigure(0, weight=1)
+        
         # Message composition
         compose_frame = ttk.LabelFrame(custom_frame, text="Compose Message", padding=10)
-        compose_frame.pack(fill='x', pady=10)
+        compose_frame.grid(row=0, column=0, sticky='ew', pady=10, padx=10)
+        compose_frame.columnconfigure(0, weight=1)
         
-        # Recipients
-        ttk.Label(compose_frame, text="Recipients (one phone number per line):").pack(anchor='w')
-        self.recipients_text = tk.Text(compose_frame, height=5, width=50)
-        self.recipients_text.pack(fill='x', pady=5)
+        # Recipients section
+        recipients_label_frame = ttk.Frame(compose_frame)
+        recipients_label_frame.pack(fill='x', pady=(0, 5))
         
-        # Message
-        ttk.Label(compose_frame, text="Message:").pack(anchor='w', pady=(10, 0))
-        self.message_text = tk.Text(compose_frame, height=8, width=50)
-        self.message_text.pack(fill='x', pady=5)
+        ttk.Label(recipients_label_frame, text="Recipients (one phone number per line):").pack(anchor='w')
+        
+        recipients_input_frame = ttk.Frame(compose_frame)
+        recipients_input_frame.pack(fill='x', pady=(0, 10))
+        recipients_input_frame.columnconfigure(0, weight=1)
+        
+        self.recipients_text = tk.Text(recipients_input_frame, height=5, width=50, font=('Arial', 10))
+        recipients_scroll = ttk.Scrollbar(recipients_input_frame, orient='vertical', command=self.recipients_text.yview)
+        self.recipients_text.configure(yscrollcommand=recipients_scroll.set)
+        
+        self.recipients_text.grid(row=0, column=0, sticky='nsew')
+        recipients_scroll.grid(row=0, column=1, sticky='ns')
+        
+        # Message section
+        message_label_frame = ttk.Frame(compose_frame)
+        message_label_frame.pack(fill='x', pady=(10, 5))
+        
+        ttk.Label(message_label_frame, text="Message:").pack(anchor='w')
+        
+        message_input_frame = ttk.Frame(compose_frame)
+        message_input_frame.pack(fill='x', pady=(0, 10))
+        message_input_frame.columnconfigure(0, weight=1)
+        
+        self.message_text = tk.Text(message_input_frame, height=8, width=50, font=('Arial', 10))
+        message_scroll = ttk.Scrollbar(message_input_frame, orient='vertical', command=self.message_text.yview)
+        self.message_text.configure(yscrollcommand=message_scroll.set)
+        
+        self.message_text.grid(row=0, column=0, sticky='nsew')
+        message_scroll.grid(row=0, column=1, sticky='ns')
         
         # Send button
-        ttk.Button(compose_frame, text="Send Messages", command=self.send_custom_messages).pack(pady=10)
+        send_button_frame = ttk.Frame(compose_frame)
+        send_button_frame.pack(fill='x', pady=10)
+        
+        send_btn = ttk.Button(send_button_frame, text="Send Messages", command=self.send_custom_messages)
+        send_btn.pack(pady=5)
+        self.create_tooltip(send_btn, "Send custom messages to all specified recipients")
         
         # Results frame
-        results_frame = ttk.LabelFrame(custom_frame, text="Results", padding=10)
-        results_frame.pack(fill='both', expand=True, pady=10)
+        results_frame = ttk.LabelFrame(custom_frame, text="Sending Results", padding=10)
+        results_frame.grid(row=1, column=0, sticky='nsew', pady=10, padx=10)
+        results_frame.rowconfigure(0, weight=1)
+        results_frame.columnconfigure(0, weight=1)
         
-        self.results_text = scrolledtext.ScrolledText(results_frame, height=10, state='disabled')
-        self.results_text.pack(fill='both', expand=True)
+        results_text_frame = ttk.Frame(results_frame)
+        results_text_frame.grid(row=0, column=0, sticky='nsew')
+        results_text_frame.rowconfigure(0, weight=1)
+        results_text_frame.columnconfigure(0, weight=1)
+        
+        self.results_text = scrolledtext.ScrolledText(results_text_frame, height=10, state='disabled', 
+                                                     font=('Arial', 10), wrap='word')
+        self.results_text.grid(row=0, column=0, sticky='nsew')
     
     def log_message(self, message):
         """Add message to log - thread safe version"""
@@ -298,14 +494,38 @@ The message includes readmission contact information and encourages them to retu
     
     def initialize_whatsapp(self):
         """Initialize WhatsApp Web"""
+        # Disable button during initialization
+        try:
+            for widget in self.window.winfo_children():
+                if isinstance(widget, ttk.Notebook):
+                    for tab in widget.tabs():
+                        tab_frame = widget.nametowidget(tab)
+                        self.set_buttons_state(tab_frame, 'disabled')
+        except Exception:
+            pass
+        
         def update_status(status):
             """Thread-safe status update"""
             def update():
                 self.status_var.set(status)
             self.window.after(0, update)
         
+        def enable_buttons():
+            """Re-enable buttons after initialization"""
+            try:
+                for widget in self.window.winfo_children():
+                    if isinstance(widget, ttk.Frame):
+                        for child in widget.winfo_children():
+                            if isinstance(child, ttk.Notebook):
+                                for tab in child.tabs():
+                                    tab_frame = child.nametowidget(tab)
+                                    self.set_buttons_state(tab_frame, 'normal')
+            except Exception:
+                pass
+        
         def init_thread():
             try:
+                self.is_initializing = True  # Mark that we're initializing
                 self.log_message("Starting WhatsApp Web initialization...")
                 update_status("Initializing...")
                 
@@ -317,15 +537,54 @@ The message includes readmission contact information and encourages them to retu
                 if not success:
                     self.log_message(f"Failed to initialize driver: {message}")
                     update_status("Failed")
+                    self.window.after(0, enable_buttons)
+                    self.is_initializing = False
                     return
                 
                 self.log_message("Driver initialized successfully. Opening WhatsApp Web...")
                 
                 # Login to WhatsApp
-                success, message = self.whatsapp.login_to_whatsapp()
-                self.log_message(f"Login attempt: {message}")
+                try:
+                    success, message = self.whatsapp.login_to_whatsapp()
+                    self.log_message(f"Login attempt result: {message}")
+                except Exception as login_error:
+                    error_str = str(login_error).lower()
+                    if "connection refused" in error_str or "session deleted" in error_str:
+                        self.log_message("❌ Browser session crashed during login attempt - reinitializing...")
+                        try:
+                            self.whatsapp.driver.quit()
+                        except:
+                            pass
+                        self.whatsapp.driver = None
+                        
+                        # Try to reinitialize once
+                        success, message = self.whatsapp.initialize_driver()
+                        if success:
+                            self.log_message("✅ Driver reinitialized - retrying login...")
+                            success, message = self.whatsapp.login_to_whatsapp()
+                        else:
+                            self.log_message(f"❌ Failed to recover: {message}")
+                            update_status("Failed")
+                            self.window.after(0, enable_buttons)
+                            self.is_initializing = False
+                            return
+                    else:
+                        self.log_message(f"❌ Login error: {login_error}")
+                        update_status("Failed")
+                        self.window.after(0, enable_buttons)
+                        self.is_initializing = False
+                        return
                 
-                if "scan the QR code" in message:
+                if success and "Already logged in" in message:
+                    # Already logged in - verify and set status
+                    self.whatsapp.is_logged_in = True
+                    update_status("Connected")
+                    self.log_message("✅ Already logged in to WhatsApp Web!")
+                    self.window.after(0, enable_buttons)
+                    self.is_initializing = False
+                    return
+                    
+                elif "scan the QR code" in message:
                     update_status("Waiting for QR scan")
                     self.log_message("QR code is ready for scanning. Please scan with your phone.")
                     
@@ -344,21 +603,93 @@ The message includes readmission contact information and encourages them to retu
                     
                     while time.time() - start_time < timeout:
                         try:
-                            # Check if logged in (short wait)
-                            wait_short = WebDriverWait(self.whatsapp.driver, 5)
-                            wait_short.until(EC.presence_of_element_located((By.XPATH, '//div[@data-testid="chat-list"]')))
-                            self.whatsapp.is_logged_in = True
-                            update_status("Connected")
-                            self.log_message("✅ WhatsApp Web successfully connected!")
-                            return
-                        except TimeoutException:
-                            # Still waiting, update progress
-                            remaining = int(timeout - (time.time() - start_time))
-                            if remaining > 0:
-                                update_status(f"Waiting for QR scan ({remaining}s)")
-                                if remaining % 10 == 0:  # Log every 10 seconds
-                                    self.log_message(f"Still waiting for QR code scan... ({remaining} seconds remaining)")
-                            continue
+                            # First check if driver is still valid
+                            if not self.whatsapp.driver:
+                                self.log_message("❌ Driver lost during wait - reinitializing...")
+                                success, message = self.whatsapp.initialize_driver()
+                                if not success:
+                                    self.log_message(f"Failed to reinitialize driver: {message}")
+                                    update_status("Failed")
+                                    self.window.after(0, enable_buttons)
+                                    self.is_initializing = False
+                                    return
+                                # Navigate back to WhatsApp
+                                self.whatsapp.driver.get("https://web.whatsapp.com")
+                                time.sleep(3)
+                            
+                            # Use comprehensive login status check with error handling
+                            try:
+                                is_logged_in, status_message = self.whatsapp.check_login_status()
+                            except Exception as status_error:
+                                # Handle connection errors specifically
+                                error_str = str(status_error).lower()
+                                if "connection refused" in error_str or "session deleted" in error_str or "chrome not reachable" in error_str:
+                                    self.log_message("❌ Browser session lost - reinitializing...")
+                                    try:
+                                        self.whatsapp.driver.quit()
+                                    except:
+                                        pass
+                                    self.whatsapp.driver = None
+                                    
+                                    # Reinitialize driver
+                                    success, message = self.whatsapp.initialize_driver()
+                                    if not success:
+                                        self.log_message(f"Failed to recover: {message}")
+                                        update_status("Failed")
+                                        self.window.after(0, enable_buttons)
+                                        self.is_initializing = False
+                                        return
+                                    
+                                    # Navigate back to WhatsApp
+                                    self.whatsapp.driver.get("https://web.whatsapp.com")
+                                    time.sleep(3)
+                                    continue
+                                else:
+                                    self.log_message(f"Status check error: {status_error}")
+                                    time.sleep(5)
+                                    continue
+                            
+                            if is_logged_in:
+                                self.whatsapp.is_logged_in = True
+                                update_status("Connected")
+                                self.log_message("✅ Login confirmed - WhatsApp Web successfully connected!")
+                                self.window.after(0, enable_buttons)
+                                self.is_initializing = False
+                                return
+                            
+                            # Check if we're still seeing QR code or if there's an issue
+                            if "QR code" in status_message:
+                                # Still waiting for QR scan - continue
+                                remaining = int(timeout - (time.time() - start_time))
+                                if remaining > 0:
+                                    update_status(f"Waiting for QR scan ({remaining}s)")
+                                    if remaining % 15 == 0:  # Log every 15 seconds
+                                        self.log_message(f"Still waiting for QR code scan... ({remaining} seconds remaining)")
+                                time.sleep(5)  # Check every 5 seconds
+                                continue
+                            else:
+                                # Something else is happening, log it
+                                self.log_message(f"Status: {status_message}")
+                                time.sleep(5)
+                                continue
+                                
+                        except Exception as e:
+                            # General error handling
+                            error_str = str(e).lower()
+                            if "connection refused" in error_str or "session deleted" in error_str or "chrome not reachable" in error_str:
+                                self.log_message("❌ Browser connection lost - attempting recovery...")
+                                try:
+                                    if self.whatsapp.driver:
+                                        self.whatsapp.driver.quit()
+                                except:
+                                    pass
+                                self.whatsapp.driver = None
+                                time.sleep(2)
+                                continue
+                            else:
+                                self.log_message(f"Unexpected error: {str(e)}")
+                                time.sleep(5)
+                                continue
                     
                     # Timeout reached
                     update_status("Failed")
@@ -374,63 +705,151 @@ The message includes readmission contact information and encourages them to retu
                     update_status("Failed")
                     self.log_message(f"❌ Login failed: {message}")
                     
+                self.window.after(0, enable_buttons)
+                self.is_initializing = False
+                    
             except Exception as e:
                 error_msg = f"Initialization error: {str(e)}"
                 self.log_message(f"❌ {error_msg}")
                 update_status("Error")
                 import traceback
                 self.log_message(f"Stack trace: {traceback.format_exc()}")
+                self.window.after(0, enable_buttons)
+                self.is_initializing = False
         
         # Run in separate thread to avoid blocking UI
         self.log_message("Starting WhatsApp initialization in background...")
         threading.Thread(target=init_thread, daemon=True).start()
     
+    def set_buttons_state(self, parent, state):
+        """Recursively set button states"""
+        try:
+            for child in parent.winfo_children():
+                if isinstance(child, ttk.Button):
+                    child.configure(state=state)
+                elif hasattr(child, 'winfo_children'):
+                    self.set_buttons_state(child, state)
+        except Exception:
+            pass
+    
+    def create_tooltip(self, widget, text):
+        """Create a tooltip for a widget"""
+        def on_enter(event):
+            tooltip = tk.Toplevel()
+            tooltip.wm_overrideredirect(True)
+            tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
+            
+            label = tk.Label(tooltip, text=text, background="lightyellow", 
+                           relief="solid", borderwidth=1, font=("Arial", 9))
+            label.pack()
+            
+            widget.tooltip = tooltip
+        
+        def on_leave(event):
+            if hasattr(widget, 'tooltip'):
+                widget.tooltip.destroy()
+                del widget.tooltip
+        
+        widget.bind("<Enter>", on_enter)
+        widget.bind("<Leave>", on_leave)
+    
+    def update_ui_responsively(self):
+        """Update UI elements responsively"""
+        try:
+            # Force GUI update
+            self.window.update_idletasks()
+        except Exception:
+            pass
+    
     def check_status(self):
         """Check WhatsApp connection status"""
+        # Show visual feedback
+        original_text = None
+        try:
+            # Find the check status button and change text temporarily
+            for widget in self.window.winfo_children():
+                if isinstance(widget, ttk.Frame):
+                    for child in widget.winfo_children():
+                        if isinstance(child, ttk.Notebook):
+                            for tab in child.tabs():
+                                tab_frame = child.nametowidget(tab)
+                                self.update_button_text(tab_frame, "Check Status", "Checking...")
+        except Exception:
+            pass
+        
+        def restore_button_text():
+            """Restore button text after check"""
+            try:
+                for widget in self.window.winfo_children():
+                    if isinstance(widget, ttk.Frame):
+                        for child in widget.winfo_children():
+                            if isinstance(child, ttk.Notebook):
+                                for tab in child.tabs():
+                                    tab_frame = child.nametowidget(tab)
+                                    self.update_button_text(tab_frame, "Checking...", "Check Status")
+            except Exception:
+                pass
+        
         def check_thread():
             try:
                 if not self.whatsapp.driver:
                     self.window.after(0, lambda: self.status_var.set("Not connected"))
                     self.log_message("WhatsApp driver not initialized")
+                    self.window.after(0, restore_button_text)
                     return
                 
-                # Try to check if still logged in by looking for chat list
+                # Use the comprehensive login status check method
                 try:
-                    from selenium.webdriver.support.ui import WebDriverWait
-                    from selenium.webdriver.support import expected_conditions as EC
-                    from selenium.webdriver.common.by import By
-                    from selenium.common.exceptions import TimeoutException
+                    is_logged_in, status_message = self.whatsapp.check_login_status()
                     
-                    wait = WebDriverWait(self.whatsapp.driver, 10)
-                    wait.until(EC.presence_of_element_located((By.XPATH, '//div[@data-testid="chat-list"]')))
-                    
-                    self.whatsapp.is_logged_in = True
-                    self.window.after(0, lambda: self.status_var.set("Connected"))
-                    self.log_message("✅ WhatsApp is connected and ready")
-                    
-                except TimeoutException:
-                    # Check if on login page (QR code visible)
-                    try:
-                        self.whatsapp.driver.find_element(By.XPATH, '//canvas')
+                    if is_logged_in:
+                        self.whatsapp.is_logged_in = True
+                        self.window.after(0, lambda: self.status_var.set("Connected"))
+                        self.log_message("✅ WhatsApp is connected and ready")
+                        self.log_message(f"Status details: {status_message}")
+                    else:
                         self.whatsapp.is_logged_in = False
-                        self.window.after(0, lambda: self.status_var.set("Waiting for QR scan"))
-                        self.log_message("⏳ QR code visible - need to scan")
-                    except:
-                        self.whatsapp.is_logged_in = False
-                        self.window.after(0, lambda: self.status_var.set("Connection lost"))
-                        self.log_message("❌ Connection lost or page not loaded properly")
+                        if "QR code" in status_message:
+                            self.window.after(0, lambda: self.status_var.set("Waiting for QR scan"))
+                            self.log_message("📱 QR code visible - please scan to login")
+                        elif "loading" in status_message.lower():
+                            self.window.after(0, lambda: self.status_var.set("Loading..."))
+                            self.log_message("⏳ WhatsApp Web is loading...")
+                        else:
+                            self.window.after(0, lambda: self.status_var.set("Disconnected"))
+                            self.log_message(f"❌ Not connected: {status_message}")
                         
                 except Exception as e:
-                    self.whatsapp.is_logged_in = False
-                    self.window.after(0, lambda: self.status_var.set("Error"))
-                    self.log_message(f"❌ Error checking status: {str(e)}")
+                    # Handle connection errors gracefully
+                    error_str = str(e).lower()
+                    if any(error in error_str for error in ["connection refused", "session deleted", "chrome not reachable"]):
+                        self.whatsapp.is_logged_in = False
+                        self.window.after(0, lambda: self.status_var.set("Browser crashed"))
+                        self.log_message("❌ Browser session ended or crashed")
+                    else:
+                        self.whatsapp.is_logged_in = False
+                        self.window.after(0, lambda: self.status_var.set("Error"))
+                        self.log_message(f"❌ Error checking status: {str(e)}")
                     
             except Exception as e:
                 self.window.after(0, lambda: self.status_var.set("Error"))
                 self.log_message(f"❌ Status check failed: {str(e)}")
+            finally:
+                self.window.after(0, restore_button_text)
         
         # Run status check in background thread
         threading.Thread(target=check_thread, daemon=True).start()
+    
+    def update_button_text(self, parent, old_text, new_text):
+        """Update button text recursively"""
+        try:
+            for child in parent.winfo_children():
+                if isinstance(child, ttk.Button) and child.cget('text') == old_text:
+                    child.configure(text=new_text)
+                elif hasattr(child, 'winfo_children'):
+                    self.update_button_text(child, old_text, new_text)
+        except Exception:
+            pass
     
     def force_status_check(self):
         """Force an immediate status check with detailed logging"""
@@ -851,9 +1270,26 @@ The message includes readmission contact information and encourages them to retu
             self.log_message(f"❌ {error_msg}")
             messagebox.showerror("Error", error_msg)
     
+    def on_window_close(self):
+        """Handle window close event"""
+        try:
+            # Close WhatsApp driver gracefully
+            if hasattr(self, 'whatsapp') and self.whatsapp:
+                self.whatsapp.close_driver()
+            
+            # Destroy the window
+            self.window.destroy()
+        except Exception as e:
+            print(f"Error closing WhatsApp window: {e}")
+            try:
+                self.window.destroy()
+            except:
+                pass
+    
     def __del__(self):
         """Cleanup when window is closed"""
         try:
-            self.whatsapp.close_driver()
+            if hasattr(self, 'whatsapp') and self.whatsapp:
+                self.whatsapp.close_driver()
         except Exception:
             pass
