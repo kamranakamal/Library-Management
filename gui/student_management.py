@@ -1134,14 +1134,14 @@ class SubscriptionEditDialog(tk.Toplevel):
         self.updated = False
         
         self.title("Edit Subscription")
-        self.geometry("450x400")
+        self.geometry("450x500")
         self.resizable(False, False)
         
         # Center the window
         self.update_idletasks()
         x = (self.winfo_screenwidth() // 2) - (450 // 2)
-        y = (self.winfo_screenheight() // 2) - (400 // 2)
-        self.geometry(f"450x400+{x}+{y}")
+        y = (self.winfo_screenheight() // 2) - (500 // 2)
+        self.geometry(f"450x500+{x}+{y}")
         
         # Make dialog modal
         self.transient(parent)
@@ -1197,12 +1197,12 @@ class SubscriptionEditDialog(tk.Toplevel):
         
         # Create button subframe for centering
         button_subframe = ttk.Frame(button_frame)
-        button_subframe.pack(expand=True)
+        button_subframe.pack()
         
         ttk.Button(button_subframe, text="Save Changes", 
-                  command=self.save_changes, width=15).pack(side='left', padx=10)
+                  command=self.save_changes, width=15).pack(side='left', padx=5)
         ttk.Button(button_subframe, text="Cancel", 
-                  command=self.destroy, width=15).pack(side='left', padx=10)
+                  command=self.destroy, width=15).pack(side='left', padx=5)
     
     def load_data(self):
         """Load subscription data into form"""
@@ -1260,14 +1260,14 @@ class SubscriptionRenewalDialog(tk.Toplevel):
         self.renewed = False
         
         self.title("Renew Subscription")
-        self.geometry("500x450")
+        self.geometry("500x550")
         self.resizable(False, False)
         
         # Center the window
         self.update_idletasks()
         x = (self.winfo_screenwidth() // 2) - (500 // 2)
-        y = (self.winfo_screenheight() // 2) - (450 // 2)
-        self.geometry(f"500x450+{x}+{y}")
+        y = (self.winfo_screenheight() // 2) - (550 // 2)
+        self.geometry(f"500x550+{x}+{y}")
         
         # Make dialog modal
         self.transient(parent)
@@ -1333,12 +1333,12 @@ class SubscriptionRenewalDialog(tk.Toplevel):
         
         # Create button subframe for centering
         button_subframe = ttk.Frame(button_frame)
-        button_subframe.pack(expand=True)
+        button_subframe.pack()
         
         ttk.Button(button_subframe, text="Renew Subscription", 
-                  command=self.renew_subscription, width=20).pack(side='left', padx=10)
+                  command=self.renew_subscription, width=20).pack(side='left', padx=5)
         ttk.Button(button_subframe, text="Cancel", 
-                  command=self.destroy, width=15).pack(side='left', padx=10)
+                  command=self.destroy, width=15).pack(side='left', padx=5)
     
     def load_data(self):
         """Load default renewal data"""
@@ -1347,6 +1347,7 @@ class SubscriptionRenewalDialog(tk.Toplevel):
         if timeslot:
             self.amount_var.set(str(timeslot.price))
         
+        # Force calculation of new end date
         self.calculate_new_end_date()
     
     def calculate_new_end_date(self, *args):
@@ -1355,7 +1356,11 @@ class SubscriptionRenewalDialog(tk.Toplevel):
             days = int(self.days_var.get())
             from datetime import datetime, timedelta
             
-            current_end = datetime.strptime(self.subscription.end_date, '%Y-%m-%d').date()
+            # Handle both string and date objects
+            if isinstance(self.subscription.end_date, str):
+                current_end = datetime.strptime(self.subscription.end_date, '%Y-%m-%d').date()
+            else:
+                current_end = self.subscription.end_date
             new_end = current_end + timedelta(days=days)
             
             self.new_end_date_label.config(text=str(new_end))
@@ -1378,7 +1383,11 @@ class SubscriptionRenewalDialog(tk.Toplevel):
             
             # Calculate new end date
             from datetime import datetime, timedelta
-            current_end = datetime.strptime(self.subscription.end_date, '%Y-%m-%d').date()
+            # Handle both string and date objects
+            if isinstance(self.subscription.end_date, str):
+                current_end = datetime.strptime(self.subscription.end_date, '%Y-%m-%d').date()
+            else:
+                current_end = self.subscription.end_date
             new_end = current_end + timedelta(days=days)
             
             # Create renewal (new subscription record)

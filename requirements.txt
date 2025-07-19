@@ -8,6 +8,9 @@ openpyxl>=3.0.0
 # For PDF generation
 fpdf2>=2.5.0
 
+# For QR code generation
+qrcode[pil]>=7.0.0
+
 # For image handling (optional for student photos)
 Pillow>=8.0.0
 

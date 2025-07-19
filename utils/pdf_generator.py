@@ -3,17 +3,51 @@ PDF receipt generation utilities
 """
 
 import os
+import tempfile
 from datetime import datetime
 from fpdf import FPDF
+import qrcode
+from PIL import Image
 from config.settings import (RECEIPTS_DIR, DEFAULT_CURRENCY, APP_NAME, 
-                           LIBRARY_NAME, LIBRARY_PHONE, LIBRARY_EMAIL, LIBRARY_ADDRESS)
+                           LIBRARY_NAME, LIBRARY_PHONE, LIBRARY_EMAIL, LIBRARY_ADDRESS, LIBRARY_WEBSITE)
 
 
-class ReceiptGenerator:
-    """Generate PDF receipts for subscriptions"""
+class PDFGenerator:
+    """PDF generator for receipts and reports"""
     
     def __init__(self):
-        self.ensure_receipts_directory()
+        self.pdf = None
+        
+    def _generate_qr_code(self, data, size=(30, 30)):
+        """Generate QR code and save as temporary image file"""
+        try:
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(data)
+            qr.make(fit=True)
+            
+            img = qr.make_image(fill_color="black", back_color="white")
+            img = img.resize(size, Image.LANCZOS)
+            
+            # Save to temporary file
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+            img.save(temp_file.name)
+            return temp_file.name
+        except Exception as e:
+            print(f"Error generating QR code: {e}")
+            return None
+    
+    def _cleanup_temp_file(self, filepath):
+        """Clean up temporary file"""
+        try:
+            if filepath and os.path.exists(filepath):
+                os.unlink(filepath)
+        except Exception as e:
+            print(f"Error cleaning up temp file: {e}")
     
     def ensure_receipts_directory(self):
         """Ensure receipts directory exists"""
@@ -79,12 +113,30 @@ class ReceiptGenerator:
             pdf.cell(0, 8, 'Student Details:', 0, 1)
             pdf.set_font('Arial', '', 12)
             
+            # Save Y position before student details
+            student_details_y = pdf.get_y()
+            
             pdf.cell(0, 8, f"Name: {subscription_data['student_name']}", 0, 1)
             pdf.cell(0, 8, f"Father's Name: {subscription_data['father_name']}", 0, 1)
             pdf.cell(0, 8, f"Mobile: {subscription_data['mobile_number']}", 0, 1)
             
             if subscription_data.get('aadhaar_number'):
                 pdf.cell(0, 8, f"Aadhaar: {subscription_data['aadhaar_number']}", 0, 1)
+            
+            # Add QR code on the right side of student details
+            qr_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'sangharsh_library_qr.png')
+            if os.path.exists(qr_path):
+                try:
+                    # Position QR code on the right side
+                    pdf.set_xy(140, student_details_y)
+                    pdf.image(qr_path, x=140, y=student_details_y, w=30, h=30)
+                    
+                    # Add text below QR code
+                    pdf.set_xy(125, student_details_y + 32)
+                    pdf.set_font('Arial', '', 8)
+                    pdf.cell(60, 3, 'Scan to visit our website', 0, 1, 'C')
+                except Exception as e:
+                    print(f"Error adding QR code: {e}")
             
             pdf.ln(5)
             
@@ -325,6 +377,9 @@ class ReceiptGenerator:
             pdf.cell(0, 10, 'Student Information:', 0, 1)
             pdf.set_font('Arial', '', 12)
             
+            # Save Y position before student details
+            student_details_y = pdf.get_y()
+            
             pdf.cell(0, 8, f"Name: {student_data['name']}", 0, 1)
             pdf.cell(0, 8, f"Father's Name: {student_data['father_name']}", 0, 1)
             pdf.cell(0, 8, f"Mobile: {student_data['mobile_number']}", 0, 1)
@@ -333,6 +388,21 @@ class ReceiptGenerator:
             if student_data.get('aadhaar_number'):
                 pdf.cell(0, 8, f"Aadhaar: {student_data['aadhaar_number']}", 0, 1)
             pdf.cell(0, 8, f"Registration Date: {student_data['registration_date']}", 0, 1)
+            
+            # Add QR code on the right side of student details
+            qr_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'sangharsh_library_qr.png')
+            if os.path.exists(qr_path):
+                try:
+                    # Position QR code on the right side
+                    pdf.set_xy(140, student_details_y)
+                    pdf.image(qr_path, x=140, y=student_details_y, w=30, h=30)
+                    
+                    # Add text below QR code
+                    pdf.set_xy(125, student_details_y + 32)
+                    pdf.set_font('Arial', '', 8)
+                    pdf.cell(60, 3, 'Scan to visit our website', 0, 1, 'C')
+                except Exception as e:
+                    print(f"Error adding QR code: {e}")
             
             pdf.ln(10)
             
@@ -446,4 +516,4 @@ class ReceiptGenerator:
 
 
 # Alias for backward compatibility
-PDFGenerator = ReceiptGenerator
+ReceiptGenerator = PDFGenerator

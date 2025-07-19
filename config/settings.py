@@ -13,6 +13,7 @@ APP_AUTHOR = "Library Management Team"
 LIBRARY_NAME = "Sangharsh Library"
 LIBRARY_PHONE = "+91 85219 10999"
 LIBRARY_EMAIL = "sangharshlibrary7@gmail.com"
+LIBRARY_WEBSITE = "https://sangharshlibrary.com"  # QR code will point to this URL
 LIBRARY_ADDRESS = "Rajgir Road, Opp. of Kohinoor Furniture, Malahbigha, Islampur, Nalanda, Bihar 801303"
 
 # Database Configuration
