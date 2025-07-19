@@ -214,6 +214,10 @@ class AnalyticsFrame(ttk.Frame):
         ttk.Button(export_frame, text="Export All Data to Excel", 
                   command=self.export_all_data).pack(side='left', padx=5)
         
+        # Export comprehensive student report
+        ttk.Button(export_frame, text="Export Comprehensive Student Report", 
+                  command=self.export_comprehensive_report).pack(side='left', padx=5)
+        
         # Export students only
         ttk.Button(export_frame, text="Export Students Only", 
                   command=self.export_students).pack(side='left', padx=5)
@@ -576,6 +580,23 @@ class AnalyticsFrame(ttk.Frame):
             success, filepath = self.exporter.export_students_data()
             if success:
                 messagebox.showinfo("Export Successful", f"Students data exported to:\n{filepath}")
+            else:
+                messagebox.showerror("Export Failed", filepath)
+        except Exception as e:
+            messagebox.showerror("Error", f"Export failed: {str(e)}")
+
+    def export_comprehensive_report(self):
+        """Export comprehensive student-subscription report"""
+        try:
+            success, filepath = self.exporter.export_comprehensive_student_report()
+            if success:
+                messagebox.showinfo("Export Successful", 
+                                  f"Comprehensive student report exported to:\n{filepath}\n\n"
+                                  f"This report includes:\n"
+                                  f"• Detailed student-subscription data with timeslot info\n"
+                                  f"• Seat numbers and duration details\n"
+                                  f"• Amount paid and cost calculations\n"
+                                  f"• Active and expired subscriptions in separate sheets")
             else:
                 messagebox.showerror("Export Failed", filepath)
         except Exception as e:

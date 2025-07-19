@@ -116,6 +116,39 @@ class ExcelExporter:
         
         except Exception as e:
             return False, f"Financial report export failed: {str(e)}"
+
+    def export_comprehensive_student_report(self):
+        """Export comprehensive student-subscription report with all details"""
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"comprehensive_student_report_{timestamp}.xlsx"
+            filepath = os.path.join(EXPORTS_DIR, filename)
+            
+            with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
+                # Comprehensive student-subscription data
+                comprehensive_data = self._get_comprehensive_student_subscription_data()
+                comprehensive_df = pd.DataFrame(comprehensive_data)
+                comprehensive_df.to_excel(writer, sheet_name='Student Subscriptions', index=False)
+                
+                # Students summary
+                students_data = self._get_students_data()
+                students_df = pd.DataFrame(students_data)
+                students_df.to_excel(writer, sheet_name='Students Summary', index=False)
+                
+                # Active subscriptions only
+                active_subscriptions = self._get_active_subscriptions_data()
+                active_df = pd.DataFrame(active_subscriptions)
+                active_df.to_excel(writer, sheet_name='Active Subscriptions', index=False)
+                
+                # Expired subscriptions
+                expired_subscriptions = self._get_expired_subscriptions_data()
+                expired_df = pd.DataFrame(expired_subscriptions)
+                expired_df.to_excel(writer, sheet_name='Expired Subscriptions', index=False)
+            
+            return True, filepath
+        
+        except Exception as e:
+            return False, f"Comprehensive report export failed: {str(e)}"
     
     def _get_students_data(self):
         """Get students data for export"""
@@ -124,9 +157,15 @@ class ExcelExporter:
                 s.id, s.name, s.father_name, s.gender, s.mobile_number,
                 s.aadhaar_number, s.email, s.locker_number, s.registration_date,
                 COUNT(ss.id) as total_subscriptions,
-                SUM(CASE WHEN ss.is_active = 1 AND ss.end_date >= date('now') THEN 1 ELSE 0 END) as active_subscriptions
+                SUM(CASE WHEN ss.is_active = 1 AND ss.end_date >= date('now') THEN 1 ELSE 0 END) as active_subscriptions,
+                SUM(ss.amount_paid) as total_amount_paid,
+                MAX(ss.end_date) as last_subscription_end,
+                GROUP_CONCAT(DISTINCT seat.id) as seat_numbers_used,
+                GROUP_CONCAT(DISTINCT t.name) as timeslots_used
             FROM students s
             LEFT JOIN student_subscriptions ss ON s.id = ss.student_id
+            LEFT JOIN seats seat ON ss.seat_id = seat.id
+            LEFT JOIN timeslots t ON ss.timeslot_id = t.id
             WHERE s.is_active = 1
             GROUP BY s.id
             ORDER BY s.name
@@ -137,10 +176,17 @@ class ExcelExporter:
         """Get subscriptions data for export"""
         query = '''
             SELECT 
-                ss.id, ss.receipt_number, s.name as student_name, s.mobile_number,
-                seat.id as seat_number, t.name as timeslot_name,
-                ss.start_date, ss.end_date, ss.amount_paid,
-                CASE WHEN ss.end_date >= date('now') THEN 'Active' ELSE 'Expired' END as status
+                ss.id, ss.receipt_number, s.name as student_name, s.father_name,
+                s.mobile_number, s.email, s.gender,
+                seat.id as seat_number, seat.row_number, seat.gender_restriction,
+                t.name as timeslot_name, t.start_time, t.end_time, t.price as timeslot_price,
+                t.duration_months, ss.start_date, ss.end_date, ss.amount_paid,
+                ROUND((JULIANDAY(ss.end_date) - JULIANDAY(ss.start_date) + 1), 0) as total_days,
+                CASE WHEN ss.end_date >= date('now') THEN 'Active' ELSE 'Expired' END as status,
+                CASE WHEN ss.end_date >= date('now') 
+                     THEN ROUND((JULIANDAY(ss.end_date) - JULIANDAY('now') + 1), 0)
+                     ELSE 0 END as days_remaining,
+                ss.receipt_path
             FROM student_subscriptions ss
             JOIN students s ON ss.student_id = s.id
             JOIN seats seat ON ss.seat_id = seat.id
@@ -263,3 +309,75 @@ class ExcelExporter:
         return [dict(row) for row in self.db_ops.db_manager.execute_query(
             query, (str(year), f"{month:02d}")
         )]
+
+    def _get_comprehensive_student_subscription_data(self):
+        """Get comprehensive student-subscription data with all details"""
+        query = '''
+            SELECT 
+                ss.id as subscription_id, ss.receipt_number,
+                s.id as student_id, s.name as student_name, s.father_name,
+                s.gender, s.mobile_number, s.email, s.aadhaar_number,
+                s.locker_number, s.registration_date,
+                seat.id as seat_number, seat.row_number, 
+                CASE seat.gender_restriction 
+                    WHEN 'M' THEN 'Male Only'
+                    WHEN 'F' THEN 'Female Only'
+                    ELSE 'Mixed'
+                END as seat_gender_restriction,
+                t.name as timeslot_name, t.start_time, t.end_time, 
+                t.price as timeslot_price, t.duration_months as planned_duration_months,
+                ss.start_date, ss.end_date, ss.amount_paid,
+                ROUND((JULIANDAY(ss.end_date) - JULIANDAY(ss.start_date) + 1), 0) as actual_duration_days,
+                ROUND((JULIANDAY(ss.end_date) - JULIANDAY(ss.start_date) + 1) / 30.0, 2) as actual_duration_months,
+                CASE WHEN ss.end_date >= date('now') THEN 'Active' ELSE 'Expired' END as status,
+                CASE WHEN ss.end_date >= date('now') 
+                     THEN ROUND((JULIANDAY(ss.end_date) - JULIANDAY('now') + 1), 0)
+                     ELSE ROUND((JULIANDAY('now') - JULIANDAY(ss.end_date)), 0) END as days_remaining_or_expired,
+                ss.receipt_path,
+                CASE WHEN ss.amount_paid > 0 
+                     THEN ROUND(ss.amount_paid / ((JULIANDAY(ss.end_date) - JULIANDAY(ss.start_date) + 1) / 30.0), 2)
+                     ELSE 0 END as cost_per_month
+            FROM student_subscriptions ss
+            JOIN students s ON ss.student_id = s.id
+            JOIN seats seat ON ss.seat_id = seat.id
+            JOIN timeslots t ON ss.timeslot_id = t.id
+            WHERE ss.is_active = 1 AND s.is_active = 1
+            ORDER BY ss.start_date DESC, s.name
+        '''
+        return [dict(row) for row in self.db_ops.db_manager.execute_query(query)]
+
+    def _get_active_subscriptions_data(self):
+        """Get only active subscriptions data"""
+        query = '''
+            SELECT 
+                ss.id, ss.receipt_number, s.name as student_name, s.mobile_number,
+                seat.id as seat_number, t.name as timeslot_name, t.start_time, t.end_time,
+                ss.start_date, ss.end_date, ss.amount_paid,
+                ROUND((JULIANDAY(ss.end_date) - JULIANDAY('now') + 1), 0) as days_remaining,
+                t.duration_months
+            FROM student_subscriptions ss
+            JOIN students s ON ss.student_id = s.id
+            JOIN seats seat ON ss.seat_id = seat.id
+            JOIN timeslots t ON ss.timeslot_id = t.id
+            WHERE ss.is_active = 1 AND s.is_active = 1 AND ss.end_date >= date('now')
+            ORDER BY ss.end_date ASC
+        '''
+        return [dict(row) for row in self.db_ops.db_manager.execute_query(query)]
+
+    def _get_expired_subscriptions_data(self):
+        """Get only expired subscriptions data"""
+        query = '''
+            SELECT 
+                ss.id, ss.receipt_number, s.name as student_name, s.mobile_number,
+                seat.id as seat_number, t.name as timeslot_name,
+                ss.start_date, ss.end_date, ss.amount_paid,
+                ROUND((JULIANDAY('now') - JULIANDAY(ss.end_date)), 0) as days_expired,
+                t.duration_months
+            FROM student_subscriptions ss
+            JOIN students s ON ss.student_id = s.id
+            JOIN seats seat ON ss.seat_id = seat.id
+            JOIN timeslots t ON ss.timeslot_id = t.id
+            WHERE ss.is_active = 1 AND s.is_active = 1 AND ss.end_date < date('now')
+            ORDER BY ss.end_date DESC
+        '''
+        return [dict(row) for row in self.db_ops.db_manager.execute_query(query)]
