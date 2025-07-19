@@ -4,6 +4,7 @@ Main application window
 
 import tkinter as tk
 from tkinter import ttk, messagebox
+import logging
 from config.settings import (
     APP_NAME, APP_VERSION, APP_AUTHOR, WINDOW_WIDTH, WINDOW_HEIGHT, BACKGROUND_COLOR
 )
@@ -58,6 +59,9 @@ class MainWindow:
         tools_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Tools", menu=tools_menu)
         tools_menu.add_command(label="Export Data", command=self.export_data)
+        tools_menu.add_separator()
+        tools_menu.add_command(label="Generate Comprehensive Receipt", command=self.generate_comprehensive_receipt)
+        tools_menu.add_separator()
         tools_menu.add_command(label="WhatsApp Automation", command=self.open_whatsapp_automation)
         
         # Help menu
@@ -240,3 +244,113 @@ Built with Python, SQLite, and Tkinter
         """.strip()
         
         messagebox.showinfo("About", about_text)
+
+    def generate_comprehensive_receipt(self):
+        """Generate comprehensive receipt for a selected student"""
+        try:
+            # Create a simple dialog to select student
+            from tkinter import simpledialog
+            from models.student import Student
+            
+            # Get all active students
+            students = Student.get_all_active()
+            if not students:
+                messagebox.showinfo("Info", "No active students found")
+                return
+            
+            # Create selection dialog
+            student_names = [f"{s.name} (ID: {s.id}) - {s.mobile_number}" for s in students]
+            
+            # Simple selection using input dialog (could be enhanced with a proper selection dialog)
+            selection = simpledialog.askstring(
+                "Select Student",
+                f"Enter student ID or partial name:\n\nAvailable students:\n" + 
+                "\n".join(student_names[:10]) + 
+                ("\n..." if len(student_names) > 10 else "")
+            )
+            
+            if not selection:
+                return
+            
+            # Find student by ID or name
+            selected_student = None
+            selection = selection.strip().lower()
+            
+            # Try to find by ID first
+            try:
+                student_id = int(selection)
+                selected_student = Student.get_by_id(student_id)
+            except ValueError:
+                # Search by name
+                for student in students:
+                    if selection in student.name.lower():
+                        selected_student = student
+                        break
+            
+            if not selected_student:
+                messagebox.showerror("Error", "Student not found")
+                return
+            
+            # Get all subscriptions for this student
+            from utils.database_manager import DatabaseOperations
+            db_ops = DatabaseOperations()
+            
+            query = '''
+                SELECT 
+                    ss.id, ss.receipt_number, ss.start_date, ss.end_date, 
+                    ss.amount_paid, ss.created_at,
+                    seat.id as seat_number,
+                    t.name as timeslot_name, t.start_time, t.end_time,
+                    CASE WHEN ss.end_date >= date('now') THEN 'Active' ELSE 'Expired' END as status
+                FROM student_subscriptions ss
+                JOIN seats seat ON ss.seat_id = seat.id
+                JOIN timeslots t ON ss.timeslot_id = t.id
+                WHERE ss.student_id = ? AND ss.is_active = 1
+                ORDER BY ss.start_date DESC
+            '''
+            
+            subscriptions_data = [dict(row) for row in db_ops.db_manager.execute_query(query, (selected_student.id,))]
+            
+            if not subscriptions_data:
+                messagebox.showinfo("Info", f"No subscriptions found for {selected_student.name}")
+                return
+            
+            # Prepare student data
+            student_data = {
+                'name': selected_student.name,
+                'father_name': selected_student.father_name,
+                'mobile_number': selected_student.mobile_number,
+                'email': selected_student.email or '',
+                'aadhaar_number': selected_student.aadhaar_number or '',
+                'registration_date': selected_student.registration_date
+            }
+            
+            # Generate comprehensive receipt
+            from utils.pdf_generator import ReceiptGenerator
+            generator = ReceiptGenerator()
+            
+            success, result = generator.generate_student_comprehensive_receipt(
+                student_data, subscriptions_data
+            )
+            
+            if success:
+                messagebox.showinfo("Success", 
+                                  f"Comprehensive receipt generated successfully!\n\n"
+                                  f"Student: {selected_student.name}\n"
+                                  f"Total Subscriptions: {len(subscriptions_data)}\n"
+                                  f"File: {result}")
+                
+                # Ask if user wants to open the file
+                if messagebox.askyesno("Open Receipt", "Would you like to open the receipt now?"):
+                    try:
+                        import subprocess
+                        subprocess.run(['xdg-open', result], check=False)
+                    except Exception as e:
+                        messagebox.showwarning("Warning", f"Could not open file automatically: {e}")
+                        
+            else:
+                messagebox.showerror("Error", f"Failed to generate comprehensive receipt: {result}")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to generate comprehensive receipt: {str(e)}")
+            logging.error(f"Main window comprehensive receipt error: {e}")

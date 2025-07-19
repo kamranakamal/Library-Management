@@ -287,6 +287,163 @@ class ReceiptGenerator:
         except Exception as e:
             return False, f"Error generating monthly report: {str(e)}"
 
+    def generate_student_comprehensive_receipt(self, student_data, subscriptions_data, filename=None):
+        """Generate comprehensive receipt showing all subscriptions of a student"""
+        try:
+            # Create filename if not provided
+            if not filename:
+                safe_name = student_data['name'].replace(' ', '_').replace('/', '_')
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"comprehensive_receipt_{safe_name}_{timestamp}.pdf"
+            
+            filepath = os.path.join(RECEIPTS_DIR, filename)
+            
+            # Create PDF
+            pdf = FPDF()
+            pdf.add_page()
+            
+            # Header
+            pdf.set_font('Arial', 'B', 18)
+            pdf.cell(0, 12, LIBRARY_NAME, 0, 1, 'C')
+            
+            pdf.set_font('Arial', '', 10)
+            pdf.cell(0, 6, LIBRARY_ADDRESS, 0, 1, 'C')
+            pdf.cell(0, 6, f"Phone: {LIBRARY_PHONE} | Email: {LIBRARY_EMAIL}", 0, 1, 'C')
+            
+            pdf.ln(8)
+            pdf.set_font('Arial', 'B', 16)
+            pdf.cell(0, 10, 'Comprehensive Subscription Receipt', 0, 1, 'C')
+            pdf.ln(8)
+            
+            # Receipt details
+            pdf.set_font('Arial', '', 12)
+            pdf.cell(0, 8, f"Generated on: {datetime.now().strftime('%d/%m/%Y at %H:%M')}", 0, 1)
+            pdf.ln(5)
+            
+            # Student details
+            pdf.set_font('Arial', 'B', 14)
+            pdf.cell(0, 10, 'Student Information:', 0, 1)
+            pdf.set_font('Arial', '', 12)
+            
+            pdf.cell(0, 8, f"Name: {student_data['name']}", 0, 1)
+            pdf.cell(0, 8, f"Father's Name: {student_data['father_name']}", 0, 1)
+            pdf.cell(0, 8, f"Mobile: {student_data['mobile_number']}", 0, 1)
+            if student_data.get('email'):
+                pdf.cell(0, 8, f"Email: {student_data['email']}", 0, 1)
+            if student_data.get('aadhaar_number'):
+                pdf.cell(0, 8, f"Aadhaar: {student_data['aadhaar_number']}", 0, 1)
+            pdf.cell(0, 8, f"Registration Date: {student_data['registration_date']}", 0, 1)
+            
+            pdf.ln(10)
+            
+            # Subscription summary
+            pdf.set_font('Arial', 'B', 14)
+            pdf.cell(0, 10, f'Subscription History ({len(subscriptions_data)} subscriptions):', 0, 1)
+            pdf.ln(5)
+            
+            # Table header
+            pdf.set_font('Arial', 'B', 10)
+            pdf.set_fill_color(230, 230, 230)
+            
+            # Column widths
+            col_widths = [15, 45, 30, 25, 25, 20, 30]  # Adjusted for Receipt column
+            headers = ['S.No', 'Receipt No.', 'Timeslot', 'Seat', 'Duration', 'Amount', 'Status']
+            
+            # Print headers
+            for i, header in enumerate(headers):
+                pdf.cell(col_widths[i], 8, header, 1, 0, 'C', True)
+            pdf.ln()
+            
+            # Table data
+            pdf.set_font('Arial', '', 9)
+            total_amount = 0
+            active_count = 0
+            expired_count = 0
+            
+            for i, sub in enumerate(subscriptions_data, 1):
+                # Alternate row colors
+                if i % 2 == 0:
+                    pdf.set_fill_color(245, 245, 245)
+                else:
+                    pdf.set_fill_color(255, 255, 255)
+                
+                # Calculate duration in months
+                from datetime import datetime as dt
+                start = dt.strptime(sub['start_date'], '%Y-%m-%d')
+                end = dt.strptime(sub['end_date'], '%Y-%m-%d')
+                duration_days = (end - start).days + 1
+                duration_months = round(duration_days / 30.0, 1)
+                
+                # Status
+                today = dt.now().date()
+                end_date = dt.strptime(sub['end_date'], '%Y-%m-%d').date()
+                status = 'Active' if end_date >= today else 'Expired'
+                
+                if status == 'Active':
+                    active_count += 1
+                else:
+                    expired_count += 1
+                
+                total_amount += float(sub['amount_paid'])
+                
+                # Data for each column
+                row_data = [
+                    str(i),
+                    sub['receipt_number'][:12] + '...' if len(sub['receipt_number']) > 15 else sub['receipt_number'],
+                    sub['timeslot_name'][:25] + '...' if len(sub['timeslot_name']) > 28 else sub['timeslot_name'],
+                    str(sub['seat_number']),
+                    f"{duration_months}m",
+                    f"{DEFAULT_CURRENCY}{sub['amount_paid']:.0f}",
+                    status
+                ]
+                
+                # Print row
+                for j, data in enumerate(row_data):
+                    pdf.cell(col_widths[j], 8, data, 1, 0, 'C', True)
+                pdf.ln()
+            
+            pdf.ln(5)
+            
+            # Summary section
+            pdf.set_font('Arial', 'B', 12)
+            pdf.cell(0, 8, 'Summary:', 0, 1)
+            pdf.set_font('Arial', '', 12)
+            
+            pdf.cell(0, 8, f"Total Subscriptions: {len(subscriptions_data)}", 0, 1)
+            pdf.cell(0, 8, f"Active Subscriptions: {active_count}", 0, 1)
+            pdf.cell(0, 8, f"Expired Subscriptions: {expired_count}", 0, 1)
+            pdf.cell(0, 8, f"Total Amount Paid: {DEFAULT_CURRENCY}{total_amount:.2f}", 0, 1)
+            
+            # Current active subscription details (if any)
+            current_subscriptions = [sub for sub in subscriptions_data if sub.get('status') == 'Active' or 
+                                   (dt.strptime(sub['end_date'], '%Y-%m-%d').date() >= dt.now().date())]
+            
+            if current_subscriptions:
+                pdf.ln(8)
+                pdf.set_font('Arial', 'B', 12)
+                pdf.cell(0, 8, 'Current Active Subscription(s):', 0, 1)
+                pdf.set_font('Arial', '', 11)
+                
+                for sub in current_subscriptions:
+                    pdf.cell(0, 6, f"- Seat {sub['seat_number']} - {sub['timeslot_name']} (Valid till {sub['end_date']})", 0, 1)
+            
+            pdf.ln(10)
+            
+            # Footer
+            pdf.set_font('Arial', 'I', 10)
+            pdf.cell(0, 6, f"This is a computer-generated receipt from {LIBRARY_NAME}", 0, 1, 'C')
+            pdf.cell(0, 6, f"Generated on {datetime.now().strftime('%d/%m/%Y at %H:%M')}", 0, 1, 'C')
+            pdf.ln(5)
+            pdf.cell(0, 6, "Thank you for choosing our library services!", 0, 1, 'C')
+            
+            # Save PDF
+            pdf.output(filepath)
+            
+            return True, filepath
+            
+        except Exception as e:
+            return False, f"Error generating comprehensive receipt: {str(e)}"
+
 
 # Alias for backward compatibility
 PDFGenerator = ReceiptGenerator

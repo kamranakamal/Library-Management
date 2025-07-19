@@ -309,6 +309,7 @@ class StudentManagementFrame(ttk.Frame):
         ttk.Button(sub_button_frame, text="Add Subscription", command=self.add_subscription).grid(row=0, column=0, padx=5)
         ttk.Button(sub_button_frame, text="Renew Subscription", command=self.renew_subscription).grid(row=0, column=1, padx=5)
         ttk.Button(sub_button_frame, text="Generate Receipt", command=self.generate_receipt).grid(row=0, column=2, padx=5)
+        ttk.Button(sub_button_frame, text="Comprehensive Receipt", command=self.generate_comprehensive_receipt).grid(row=0, column=3, padx=5)
     
     def create_student_list(self):
         """Create student list panel"""
@@ -797,6 +798,89 @@ class StudentManagementFrame(ttk.Frame):
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to generate receipt: {str(e)}")
+
+    def generate_comprehensive_receipt(self):
+        """Generate comprehensive receipt showing all subscriptions of selected student"""
+        try:
+            # Check if a student is selected
+            selection = self.student_tree.selection()
+            if not selection:
+                messagebox.showwarning("Warning", "Please select a student to generate comprehensive receipt")
+                return
+            
+            # Get selected student
+            item = self.student_tree.item(selection[0])
+            student_id = item['values'][0]
+            
+            student = Student.get_by_id(student_id)
+            if not student:
+                messagebox.showerror("Error", "Student not found")
+                return
+            
+            # Get all subscriptions for this student
+            from utils.database_manager import DatabaseOperations
+            db_ops = DatabaseOperations()
+            
+            # Query to get all subscription details
+            query = '''
+                SELECT 
+                    ss.id, ss.receipt_number, ss.start_date, ss.end_date, 
+                    ss.amount_paid, ss.created_at,
+                    seat.id as seat_number,
+                    t.name as timeslot_name, t.start_time, t.end_time,
+                    CASE WHEN ss.end_date >= date('now') THEN 'Active' ELSE 'Expired' END as status
+                FROM student_subscriptions ss
+                JOIN seats seat ON ss.seat_id = seat.id
+                JOIN timeslots t ON ss.timeslot_id = t.id
+                WHERE ss.student_id = ? AND ss.is_active = 1
+                ORDER BY ss.start_date DESC
+            '''
+            
+            subscriptions_data = [dict(row) for row in db_ops.db_manager.execute_query(query, (student_id,))]
+            
+            if not subscriptions_data:
+                messagebox.showinfo("Info", "No subscriptions found for this student")
+                return
+            
+            # Prepare student data
+            student_data = {
+                'name': student.name,
+                'father_name': student.father_name,
+                'mobile_number': student.mobile_number,
+                'email': student.email or '',
+                'aadhaar_number': student.aadhaar_number or '',
+                'registration_date': student.registration_date
+            }
+            
+            # Generate comprehensive receipt
+            from utils.pdf_generator import ReceiptGenerator
+            generator = ReceiptGenerator()
+            
+            success, result = generator.generate_student_comprehensive_receipt(
+                student_data, subscriptions_data
+            )
+            
+            if success:
+                messagebox.showinfo("Success", 
+                                  f"Comprehensive receipt generated successfully!\n\n"
+                                  f"File: {result}\n"
+                                  f"Total Subscriptions: {len(subscriptions_data)}\n"
+                                  f"Student: {student.name}")
+                
+                # Ask if user wants to open the file
+                if messagebox.askyesno("Open Receipt", "Would you like to open the receipt now?"):
+                    try:
+                        import subprocess
+                        subprocess.run(['xdg-open', result], check=False)
+                    except Exception as e:
+                        messagebox.showwarning("Warning", f"Could not open file automatically: {e}")
+                        
+            else:
+                messagebox.showerror("Error", f"Failed to generate comprehensive receipt: {result}")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to generate comprehensive receipt: {str(e)}")
+            logging.error(f"Comprehensive receipt generation error: {e}")
     
     def renew_subscription(self):
         """Renew subscription for selected student"""
