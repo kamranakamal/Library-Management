@@ -8,6 +8,7 @@ import logging
 import os
 import subprocess
 from datetime import date, datetime, timedelta
+from dateutil.relativedelta import relativedelta
 from models.student import Student
 from models.subscription import Subscription
 from models.seat import Seat
@@ -272,6 +273,23 @@ class StudentManagementFrame(ttk.Frame):
         self.seat_combo.grid(row=start_row, column=1, pady=2, sticky='ew')
         start_row += 1
         
+        # Start Date
+        ttk.Label(parent, text="Start Date:").grid(row=start_row, column=0, sticky='w', pady=2)
+        start_date_frame = ttk.Frame(parent)
+        start_date_frame.grid(row=start_row, column=1, pady=2, sticky='ew')
+        
+        self.start_date_var = tk.StringVar(value=str(date.today()))
+        start_date_entry = ttk.Entry(start_date_frame, textvariable=self.start_date_var, width=22)
+        start_date_entry.grid(row=0, column=0, sticky='ew')
+        
+        ttk.Button(start_date_frame, text="Today", 
+                  command=lambda: self.start_date_var.set(str(date.today())), width=8).grid(row=0, column=1, padx=(5,0))
+        ttk.Button(start_date_frame, text="Pick", 
+                  command=lambda: self.open_date_picker(self.start_date_var, "Select Start Date"), width=8).grid(row=0, column=2, padx=(5,0))
+        
+        start_date_frame.columnconfigure(0, weight=1)
+        start_row += 1
+
         # Duration
         ttk.Label(parent, text="Duration (months):").grid(row=start_row, column=0, sticky='w', pady=2)
         self.duration_var = tk.StringVar(value="1")
@@ -712,9 +730,16 @@ class StudentManagementFrame(ttk.Frame):
             
             # Calculate dates
             duration_months = int(self.duration_var.get())
-            start_date = date.today()
-            from datetime import timedelta
-            end_date = start_date + timedelta(days=30 * duration_months)
+            
+            # Parse the start date from the input field
+            try:
+                start_date = datetime.strptime(self.start_date_var.get(), '%Y-%m-%d').date()
+            except ValueError:
+                messagebox.showerror("Error", "Invalid start date format. Please use YYYY-MM-DD format.")
+                return
+            
+            # Calculate end date properly using months, not just 30 days
+            end_date = start_date + relativedelta(months=duration_months) - timedelta(days=1)
             
             # Create subscription
             subscription = Subscription(
@@ -755,6 +780,7 @@ class StudentManagementFrame(ttk.Frame):
         """Clear only the subscription form fields, keep student data"""
         self.timeslot_var.set("")
         self.seat_var.set("")
+        self.start_date_var.set(str(date.today()))
         self.duration_var.set("1")
         self.amount_var.set("")
     

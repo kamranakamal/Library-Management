@@ -3,6 +3,7 @@ Student subscription model for database operations
 """
 
 from datetime import date, timedelta
+from dateutil.relativedelta import relativedelta
 from config.database import DatabaseManager
 
 
@@ -333,12 +334,15 @@ class Subscription:
             months = timeslot.duration_months if timeslot else 1
         
         # Create new subscription starting from current end date
+        from dateutil.relativedelta import relativedelta
+        new_end_date = self.end_date + relativedelta(months=months)
+        
         new_subscription = Subscription(
             student_id=self.student_id,
             seat_id=self.seat_id,
             timeslot_id=self.timeslot_id,
             start_date=self.end_date,
-            end_date=self.end_date + timedelta(days=30 * months),
+            end_date=new_end_date,
             amount_paid=self.amount_paid
         )
         
