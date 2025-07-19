@@ -111,73 +111,27 @@ class PDFGenerator:
             # Save Y position before student details
             student_details_y = pdf.get_y()
             
-            pdf.cell(0, 8, f"Name: {subscription_data['student_name']}", 0, 1)
-            pdf.cell(0, 8, f"Father's Name: {subscription_data['father_name']}", 0, 1)
-            pdf.cell(0, 8, f"Mobile: {subscription_data['mobile_number']}", 0, 1)
+            pdf.cell(0, 6, f"Name: {subscription_data['student_name']}", 0, 1)
+            pdf.cell(0, 6, f"Father's Name: {subscription_data['father_name']}", 0, 1)
+            pdf.cell(0, 6, f"Mobile: {subscription_data['mobile_number']}", 0, 1)
             
             if subscription_data.get('aadhaar_number'):
-                pdf.cell(0, 8, f"Aadhaar: {subscription_data['aadhaar_number']}", 0, 1)
+                pdf.cell(0, 6, f"Aadhaar: {subscription_data['aadhaar_number']}", 0, 1)
             
-            # Calculate the bottom of student details
-            student_details_end = pdf.get_y()
-            
-            # Add QR codes on the right side of student details
-            qr_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'sangharsh_library_qr.png')
-            qr_bottom_y = student_details_y  # Track the bottom of QR codes
-            
-            if os.path.exists(qr_path):
-                try:
-                    # Position website QR code on the right side
-                    pdf.image(qr_path, x=140, y=student_details_y, w=25, h=25)
-                    
-                    # Add text below website QR code
-                    pdf.set_xy(125, student_details_y + 26)
-                    pdf.set_font('Arial', '', 7)
-                    pdf.cell(55, 3, 'Scan to visit our website', 0, 0, 'C')
-                    
-                    # Generate and add library rules QR code below website QR code
-                    library_rules_url = "https://www.notion.so/Sangharsh-Library-rules-235ed2a2852c80fa980cf28ceeb9f5f1"
-                    rules_qr_path = self.generate_qr_code(library_rules_url)
-                    if rules_qr_path:
-                        # Position library rules QR code below website QR code
-                        pdf.image(rules_qr_path, x=140, y=student_details_y + 32, w=25, h=25)
-                        
-                        # Add text below library rules QR code
-                        pdf.set_xy(125, student_details_y + 58)
-                        pdf.set_font('Arial', '', 7)
-                        pdf.cell(55, 3, 'Scan this to know library rules', 0, 0, 'C')
-                        
-                        # Update QR bottom position
-                        qr_bottom_y = student_details_y + 62
-                        
-                        # Clean up temporary QR code file
-                        try:
-                            os.remove(rules_qr_path)
-                        except:
-                            pass
-                    else:
-                        qr_bottom_y = student_details_y + 30
-                            
-                except Exception as e:
-                    print(f"Error adding QR code: {e}")
-                    qr_bottom_y = student_details_y
-            
-            # Ensure proper spacing - move to the bottom of either student details or QR codes
-            final_y = max(student_details_end, qr_bottom_y)
-            pdf.set_y(final_y + 3)  # Reduced gap from 8 to 3 for better spacing
+            pdf.ln(3)  # Small gap after student details
             
             # Subscription details
             pdf.set_font('Arial', 'B', 12)
-            pdf.cell(0, 8, 'Subscription Details:', 0, 1)
+            pdf.cell(0, 6, 'Subscription Details:', 0, 1)
             pdf.set_font('Arial', '', 12)
             
-            pdf.cell(0, 8, f"Seat Number: {subscription_data['seat_id']}", 0, 1)
-            pdf.cell(0, 8, f"Timeslot: {subscription_data['timeslot_name']}", 0, 1)
-            pdf.cell(0, 8, f"Time: {subscription_data['timeslot_time']}", 0, 1)  # Added timeslot time
-            pdf.cell(0, 8, f"Duration: {subscription_data['start_date']} to {subscription_data['end_date']}", 0, 1)
+            pdf.cell(0, 6, f"Seat Number: {subscription_data['seat_id']}", 0, 1)
+            pdf.cell(0, 6, f"Timeslot: {subscription_data['timeslot_name']}", 0, 1)
+            pdf.cell(0, 6, f"Time: {subscription_data['timeslot_time']}", 0, 1)
+            pdf.cell(0, 6, f"Duration: {subscription_data['start_date']} to {subscription_data['end_date']}", 0, 1)
             
             if subscription_data.get('locker_number'):
-                pdf.cell(0, 8, f"Locker Number: {subscription_data['locker_number']}", 0, 1)
+                pdf.cell(0, 6, f"Locker Number: {subscription_data['locker_number']}", 0, 1)
             
             pdf.ln(8)
             
@@ -208,10 +162,52 @@ class PDFGenerator:
             
             pdf.ln(10)
             
+            # Add QR codes at the bottom
+            qr_y = pdf.get_y()
+            pdf.set_font('Arial', 'B', 10)
+            pdf.cell(0, 6, 'Quick Access:', 0, 1)
+            pdf.ln(2)
+            
+            # Website QR code
+            qr_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'sangharsh_library_qr.png')
+            if os.path.exists(qr_path):
+                try:
+                    # Position website QR code on the left
+                    pdf.image(qr_path, x=30, y=pdf.get_y(), w=25, h=25)
+                    
+                    # Add text below website QR code
+                    pdf.set_xy(20, pdf.get_y() + 26)
+                    pdf.set_font('Arial', '', 8)
+                    pdf.cell(45, 3, 'Visit our website', 0, 0, 'C')
+                    
+                    # Generate and add library rules QR code on the right
+                    library_rules_url = "https://www.notion.so/Sangharsh-Library-rules-235ed2a2852c80fa980cf28ceeb9f5f1"
+                    rules_qr_path = self.generate_qr_code(library_rules_url)
+                    if rules_qr_path:
+                        # Position library rules QR code on the right
+                        pdf.image(rules_qr_path, x=140, y=qr_y + 8, w=25, h=25)
+                        
+                        # Add text below library rules QR code
+                        pdf.set_xy(130, qr_y + 34)
+                        pdf.set_font('Arial', '', 8)
+                        pdf.cell(45, 3, 'Library rules & policies', 0, 0, 'C')
+                        
+                        # Clean up temporary QR code file
+                        try:
+                            os.remove(rules_qr_path)
+                        except:
+                            pass
+                            
+                except Exception as e:
+                    print(f"Error adding QR codes: {e}")
+            
+            # Move cursor below QR codes
+            pdf.set_y(qr_y + 45)
+            
             # Footer
             pdf.set_font('Arial', 'I', 10)
-            pdf.cell(0, 8, 'Thank you for choosing our library!', 0, 1, 'C')
-            pdf.cell(0, 8, f'Generated on: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
+            pdf.cell(0, 6, 'Thank you for choosing our library!', 0, 1, 'C')
+            pdf.cell(0, 6, f'Generated on: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
             
             # Save PDF
             filename = custom_filename or f"receipt_{subscription_data['receipt_number']}.pdf"
@@ -285,75 +281,71 @@ class PDFGenerator:
             # Save Y position before student details
             student_details_y = pdf.get_y()
             
-            pdf.cell(0, 8, f"Name: {renewal_data['student_name']}", 0, 1)
-            pdf.cell(0, 8, f"Mobile: {renewal_data['mobile_number']}", 0, 1)
-            pdf.cell(0, 8, f"Seat Number: {renewal_data['seat_id']}", 0, 1)
-            pdf.cell(0, 8, f"Timeslot: {renewal_data['timeslot_name']}", 0, 1)
-            pdf.cell(0, 8, f"Time: {renewal_data['timeslot_time']}", 0, 1)
+            pdf.cell(0, 6, f"Name: {renewal_data['student_name']}", 0, 1)
+            pdf.cell(0, 6, f"Mobile: {renewal_data['mobile_number']}", 0, 1)
+            pdf.cell(0, 6, f"Seat Number: {renewal_data['seat_id']}", 0, 1)
+            pdf.cell(0, 6, f"Timeslot: {renewal_data['timeslot_name']}", 0, 1)
+            pdf.cell(0, 6, f"Time: {renewal_data['timeslot_time']}", 0, 1)
             
-            # Calculate the bottom of student details
-            student_details_end = pdf.get_y()
+            pdf.ln(3)  # Small gap after student details
             
-            # Add QR codes on the right side of student details
+            # Renewal details
+            pdf.set_font('Arial', 'B', 12)
+            pdf.cell(0, 6, 'Renewal Details:', 0, 1)
+            pdf.set_font('Arial', '', 12)
+            
+            pdf.cell(0, 6, f"Previous End Date: {renewal_data['previous_end']}", 0, 1)
+            pdf.cell(0, 6, f"New End Date: {renewal_data['new_end']}", 0, 1)
+            pdf.cell(0, 6, f"Renewal Amount: {DEFAULT_CURRENCY}{renewal_data['renewal_amount']}", 0, 1)
+            pdf.cell(0, 6, f"Total Amount Paid: {DEFAULT_CURRENCY}{renewal_data['total_amount']}", 0, 1)
+            pdf.ln(10)
+            
+            # Add QR codes at the bottom
+            qr_y = pdf.get_y()
+            pdf.set_font('Arial', 'B', 10)
+            pdf.cell(0, 6, 'Quick Access:', 0, 1)
+            pdf.ln(2)
+            
+            # Website QR code
             qr_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'sangharsh_library_qr.png')
-            qr_bottom_y = student_details_y  # Track the bottom of QR codes
-            
             if os.path.exists(qr_path):
                 try:
-                    # Position website QR code on the right side
-                    pdf.image(qr_path, x=140, y=student_details_y, w=25, h=25)
+                    # Position website QR code on the left
+                    pdf.image(qr_path, x=30, y=pdf.get_y(), w=25, h=25)
                     
                     # Add text below website QR code
-                    pdf.set_xy(125, student_details_y + 26)
-                    pdf.set_font('Arial', '', 7)
-                    pdf.cell(55, 3, 'Scan to visit our website', 0, 0, 'C')
+                    pdf.set_xy(20, pdf.get_y() + 26)
+                    pdf.set_font('Arial', '', 8)
+                    pdf.cell(45, 3, 'Visit our website', 0, 0, 'C')
                     
-                    # Generate and add library rules QR code below website QR code
+                    # Generate and add library rules QR code on the right
                     library_rules_url = "https://www.notion.so/Sangharsh-Library-rules-235ed2a2852c80fa980cf28ceeb9f5f1"
                     rules_qr_path = self.generate_qr_code(library_rules_url)
                     if rules_qr_path:
-                        # Position library rules QR code below website QR code
-                        pdf.image(rules_qr_path, x=140, y=student_details_y + 32, w=25, h=25)
+                        # Position library rules QR code on the right
+                        pdf.image(rules_qr_path, x=140, y=qr_y + 8, w=25, h=25)
                         
                         # Add text below library rules QR code
-                        pdf.set_xy(125, student_details_y + 58)
-                        pdf.set_font('Arial', '', 7)
-                        pdf.cell(55, 3, 'Scan this to know library rules', 0, 0, 'C')
-                        
-                        # Update QR bottom position
-                        qr_bottom_y = student_details_y + 62
+                        pdf.set_xy(130, qr_y + 34)
+                        pdf.set_font('Arial', '', 8)
+                        pdf.cell(45, 3, 'Library rules & policies', 0, 0, 'C')
                         
                         # Clean up temporary QR code file
                         try:
                             os.remove(rules_qr_path)
                         except:
                             pass
-                    else:
-                        qr_bottom_y = student_details_y + 30
                             
                 except Exception as e:
-                    print(f"Error adding QR code: {e}")
-                    qr_bottom_y = student_details_y
+                    print(f"Error adding QR codes: {e}")
             
-            # Ensure proper spacing - move to the bottom of either student details or QR codes
-            final_y = max(student_details_end, qr_bottom_y)
-            pdf.set_y(final_y + 8)  # Add small gap before next section
-            
-            # Renewal details
-            pdf.set_font('Arial', 'B', 12)
-            pdf.cell(0, 8, 'Renewal Details:', 0, 1)
-            pdf.set_font('Arial', '', 12)
-            
-            pdf.cell(0, 8, f"Previous End Date: {renewal_data['previous_end']}", 0, 1)
-            pdf.cell(0, 8, f"New End Date: {renewal_data['new_end']}", 0, 1)
-            pdf.cell(0, 8, f"Renewal Amount: {DEFAULT_CURRENCY}{renewal_data['renewal_amount']}", 0, 1)
-            pdf.cell(0, 8, f"Total Amount Paid: {DEFAULT_CURRENCY}{renewal_data['total_amount']}", 0, 1)
-            pdf.ln(10)
+            # Move cursor below QR codes
+            pdf.set_y(qr_y + 45)
             
             # Footer
             pdf.set_font('Arial', 'I', 10)
-            pdf.cell(0, 8, 'Thank you for renewing your subscription!', 0, 1, 'C')
-            pdf.cell(0, 8, f'Generated on: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
+            pdf.cell(0, 6, 'Thank you for renewing your subscription!', 0, 1, 'C')
+            pdf.cell(0, 6, f'Generated on: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
             
             # Save PDF
             filename = custom_filename or f"renewal_{renewal_data['receipt_number']}.pdf"
@@ -457,83 +449,38 @@ class PDFGenerator:
             # Save Y position before student details
             student_details_y = pdf.get_y()
             
-            pdf.cell(0, 8, f"Name: {student_data['name']}", 0, 1)
-            pdf.cell(0, 8, f"Father's Name: {student_data['father_name']}", 0, 1)
-            pdf.cell(0, 8, f"Mobile: {student_data['mobile_number']}", 0, 1)
+            pdf.cell(0, 6, f"Name: {student_data['name']}", 0, 1)
+            pdf.cell(0, 6, f"Father's Name: {student_data['father_name']}", 0, 1)
+            pdf.cell(0, 6, f"Mobile: {student_data['mobile_number']}", 0, 1)
             if student_data.get('email'):
-                pdf.cell(0, 8, f"Email: {student_data['email']}", 0, 1)
+                pdf.cell(0, 6, f"Email: {student_data['email']}", 0, 1)
             if student_data.get('aadhaar_number'):
-                pdf.cell(0, 8, f"Aadhaar: {student_data['aadhaar_number']}", 0, 1)
-            pdf.cell(0, 8, f"Registration Date: {student_data['registration_date']}", 0, 1)
+                pdf.cell(0, 6, f"Aadhaar: {student_data['aadhaar_number']}", 0, 1)
+            pdf.cell(0, 6, f"Registration Date: {student_data['registration_date']}", 0, 1)
             
-            # Calculate the bottom of student details
-            student_details_end = pdf.get_y()
-            
-            # Add QR codes on the right side of student details
-            qr_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'sangharsh_library_qr.png')
-            qr_bottom_y = student_details_y  # Track the bottom of QR codes
-            
-            if os.path.exists(qr_path):
-                try:
-                    # Position website QR code on the right side
-                    pdf.image(qr_path, x=140, y=student_details_y, w=25, h=25)
-                    
-                    # Add text below website QR code
-                    pdf.set_xy(125, student_details_y + 26)
-                    pdf.set_font('Arial', '', 7)
-                    pdf.cell(55, 3, 'Scan to visit our website', 0, 0, 'C')
-                    
-                    # Generate and add library rules QR code below website QR code
-                    library_rules_url = "https://www.notion.so/Sangharsh-Library-rules-235ed2a2852c80fa980cf28ceeb9f5f1"
-                    rules_qr_path = self.generate_qr_code(library_rules_url)
-                    if rules_qr_path:
-                        # Position library rules QR code below website QR code
-                        pdf.image(rules_qr_path, x=140, y=student_details_y + 32, w=25, h=25)
-                        
-                        # Add text below library rules QR code
-                        pdf.set_xy(125, student_details_y + 58)
-                        pdf.set_font('Arial', '', 7)
-                        pdf.cell(55, 3, 'Scan this to know library rules', 0, 0, 'C')
-                        
-                        # Update QR bottom position
-                        qr_bottom_y = student_details_y + 62
-                        
-                        # Clean up temporary QR code file
-                        try:
-                            os.remove(rules_qr_path)
-                        except:
-                            pass
-                    else:
-                        qr_bottom_y = student_details_y + 30
-                            
-                except Exception as e:
-                    print(f"Error adding QR code: {e}")
-                    qr_bottom_y = student_details_y
-            
-            # Ensure proper spacing - move to the bottom of either student details or QR codes
-            final_y = max(student_details_end, qr_bottom_y)
-            pdf.set_y(final_y + 8)  # Add small gap before next section
+            # Move to next section with minimal spacing
+            pdf.ln(5)
             
             # Subscription summary
             pdf.set_font('Arial', 'B', 14)
-            pdf.cell(0, 10, f'Subscription History ({len(subscriptions_data)} subscriptions):', 0, 1)
-            pdf.ln(5)
+            pdf.cell(0, 8, f'Subscription History ({len(subscriptions_data)} subscriptions):', 0, 1)
+            pdf.ln(3)
             
             # Table header
-            pdf.set_font('Arial', 'B', 10)
+            pdf.set_font('Arial', 'B', 9)
             pdf.set_fill_color(230, 230, 230)
             
-            # Column widths
-            col_widths = [15, 45, 30, 25, 25, 20, 30]  # Adjusted for Receipt column
+            # Column widths - optimized for compactness
+            col_widths = [12, 40, 28, 20, 22, 18, 25]
             headers = ['S.No', 'Receipt No.', 'Timeslot', 'Seat', 'Duration', 'Amount', 'Status']
             
             # Print headers
             for i, header in enumerate(headers):
-                pdf.cell(col_widths[i], 8, header, 1, 0, 'C', True)
+                pdf.cell(col_widths[i], 6, header, 1, 0, 'C', True)
             pdf.ln()
             
             # Table data
-            pdf.set_font('Arial', '', 9)
+            pdf.set_font('Arial', '', 8)
             total_amount = 0
             active_count = 0
             expired_count = 0
@@ -564,55 +511,97 @@ class PDFGenerator:
                 
                 total_amount += float(sub['amount_paid'])
                 
-                # Data for each column
+                # Data for each column - more compact
                 row_data = [
                     str(i),
-                    sub['receipt_number'][:12] + '...' if len(sub['receipt_number']) > 15 else sub['receipt_number'],
-                    sub['timeslot_name'][:25] + '...' if len(sub['timeslot_name']) > 28 else sub['timeslot_name'],
+                    sub['receipt_number'][:10] + '..' if len(sub['receipt_number']) > 12 else sub['receipt_number'],
+                    sub['timeslot_name'][:22] + '..' if len(sub['timeslot_name']) > 25 else sub['timeslot_name'],
                     str(sub['seat_number']),
                     f"{duration_months}m",
                     f"{DEFAULT_CURRENCY}{sub['amount_paid']:.0f}",
                     status
                 ]
                 
-                # Print row
+                # Print row with reduced height
                 for j, data in enumerate(row_data):
-                    pdf.cell(col_widths[j], 8, data, 1, 0, 'C', True)
+                    pdf.cell(col_widths[j], 6, data, 1, 0, 'C', True)
                 pdf.ln()
             
-            pdf.ln(5)
+            pdf.ln(3)
             
-            # Summary section
-            pdf.set_font('Arial', 'B', 12)
-            pdf.cell(0, 8, 'Summary:', 0, 1)
-            pdf.set_font('Arial', '', 12)
+            # Summary section - more compact
+            pdf.set_font('Arial', 'B', 11)
+            pdf.cell(0, 6, 'Summary:', 0, 1)
+            pdf.set_font('Arial', '', 10)
             
-            pdf.cell(0, 8, f"Total Subscriptions: {len(subscriptions_data)}", 0, 1)
-            pdf.cell(0, 8, f"Active Subscriptions: {active_count}", 0, 1)
-            pdf.cell(0, 8, f"Expired Subscriptions: {expired_count}", 0, 1)
-            pdf.cell(0, 8, f"Total Amount Paid: {DEFAULT_CURRENCY}{total_amount:.2f}", 0, 1)
+            pdf.cell(0, 5, f"Total Subscriptions: {len(subscriptions_data)}", 0, 1)
+            pdf.cell(0, 5, f"Active Subscriptions: {active_count}", 0, 1)
+            pdf.cell(0, 5, f"Expired Subscriptions: {expired_count}", 0, 1)
+            pdf.cell(0, 5, f"Total Amount Paid: {DEFAULT_CURRENCY}{total_amount:.2f}", 0, 1)
             
-            # Current active subscription details (if any)
+            # Current active subscription details (if any) - more compact
             current_subscriptions = [sub for sub in subscriptions_data if sub.get('status') == 'Active' or 
                                    (dt.strptime(sub['end_date'], '%Y-%m-%d').date() >= dt.now().date())]
             
             if current_subscriptions:
-                pdf.ln(8)
-                pdf.set_font('Arial', 'B', 12)
-                pdf.cell(0, 8, 'Current Active Subscription(s):', 0, 1)
-                pdf.set_font('Arial', '', 11)
+                pdf.ln(3)
+                pdf.set_font('Arial', 'B', 11)
+                pdf.cell(0, 6, 'Current Active Subscription(s):', 0, 1)
+                pdf.set_font('Arial', '', 10)
                 
                 for sub in current_subscriptions:
-                    pdf.cell(0, 6, f"- Seat {sub['seat_number']} - {sub['timeslot_name']} (Valid till {sub['end_date']})", 0, 1)
+                    pdf.cell(0, 5, f"- Seat {sub['seat_number']} - {sub['timeslot_name']} (Valid till {sub['end_date']})", 0, 1)
             
-            pdf.ln(10)
-            
-            # Footer
-            pdf.set_font('Arial', 'I', 10)
-            pdf.cell(0, 6, f"This is a computer-generated receipt from {LIBRARY_NAME}", 0, 1, 'C')
-            pdf.cell(0, 6, f"Generated on {datetime.now().strftime('%d/%m/%Y at %H:%M')}", 0, 1, 'C')
             pdf.ln(5)
-            pdf.cell(0, 6, "Thank you for choosing our library services!", 0, 1, 'C')
+            
+            # Add QR codes at the bottom - more compact
+            qr_y = pdf.get_y()
+            pdf.set_font('Arial', 'B', 9)
+            pdf.cell(0, 5, 'Quick Access:', 0, 1)
+            pdf.ln(1)
+            
+            # Website QR code
+            qr_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'sangharsh_library_qr.png')
+            if os.path.exists(qr_path):
+                try:
+                    # Position website QR code on the left - smaller size
+                    pdf.image(qr_path, x=35, y=pdf.get_y(), w=20, h=20)
+                    
+                    # Add text below website QR code
+                    pdf.set_xy(25, pdf.get_y() + 21)
+                    pdf.set_font('Arial', '', 7)
+                    pdf.cell(40, 3, 'Visit our website', 0, 0, 'C')
+                    
+                    # Generate and add library rules QR code on the right - smaller and closer
+                    library_rules_url = "https://www.notion.so/Sangharsh-Library-rules-235ed2a2852c80fa980cf28ceeb9f5f1"
+                    rules_qr_path = self.generate_qr_code(library_rules_url)
+                    if rules_qr_path:
+                        # Position library rules QR code on the right
+                        pdf.image(rules_qr_path, x=135, y=qr_y + 6, w=20, h=20)
+                        
+                        # Add text below library rules QR code
+                        pdf.set_xy(125, qr_y + 27)
+                        pdf.set_font('Arial', '', 7)
+                        pdf.cell(40, 3, 'Library rules & policies', 0, 0, 'C')
+                        
+                        # Clean up temporary QR code file
+                        try:
+                            os.remove(rules_qr_path)
+                        except:
+                            pass
+                            
+                except Exception as e:
+                    print(f"Error adding QR codes: {e}")
+            
+            # Move cursor below QR codes - less space
+            pdf.set_y(qr_y + 32)
+            
+            # Footer - more compact
+            pdf.set_font('Arial', 'I', 8)
+            pdf.cell(0, 4, f"Computer-generated receipt from {LIBRARY_NAME}", 0, 1, 'C')
+            pdf.cell(0, 4, f"Generated on {datetime.now().strftime('%d/%m/%Y at %H:%M')}", 0, 1, 'C')
+            pdf.ln(2)
+            pdf.cell(0, 4, "Thank you for choosing our library services!", 0, 1, 'C')
             
             # Save PDF
             pdf.output(filepath)

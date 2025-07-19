@@ -264,7 +264,7 @@ Built with Python, SQLite, and Tkinter
             from models.student import Student
             
             # Get all active students
-            students = Student.get_all_active()
+            students = Student.get_all(active_only=True)
             if not students:
                 messagebox.showinfo("Info", "No active students found")
                 return

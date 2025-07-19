@@ -7,6 +7,7 @@ from tkinter import ttk, messagebox
 import logging
 import os
 import subprocess
+import threading
 from datetime import date, datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from models.student import Student
@@ -379,11 +380,11 @@ class StudentManagementFrame(ttk.Frame):
             else:
                 self.subscription_tree.column(col, width=80)
         
-        self.subscription_tree.grid(row=0, column=0, columnspan=4, sticky='nsew')
+        self.subscription_tree.grid(row=0, column=0, columnspan=5, sticky='nsew')
         
         # Subscription management buttons
         button_frame = ttk.Frame(subs_frame)
-        button_frame.grid(row=1, column=0, columnspan=4, pady=5, sticky='ew')
+        button_frame.grid(row=1, column=0, columnspan=5, pady=5, sticky='ew')
         
         ttk.Button(button_frame, text="Edit Subscription", 
                   command=self.edit_subscription).grid(row=0, column=0, padx=5)
@@ -393,6 +394,8 @@ class StudentManagementFrame(ttk.Frame):
                   command=self.delete_subscription).grid(row=0, column=2, padx=5)
         ttk.Button(button_frame, text="View Receipt", 
                   command=self.view_receipt).grid(row=0, column=3, padx=5)
+        ttk.Button(button_frame, text="Comprehensive Receipt", 
+                  command=self.generate_comprehensive_receipt).grid(row=0, column=4, padx=5)
         
         # Bind subscription selection event
         self.subscription_tree.bind('<<TreeviewSelect>>', self.on_subscription_select)
@@ -489,6 +492,9 @@ class StudentManagementFrame(ttk.Frame):
             # Get selected student
             item = self.student_tree.item(selection[0])
             student_id = item['values'][0]
+            
+            # Set current student ID for other operations
+            self.current_student_id = student_id
             
             student = Student.get_by_id(student_id)
             if student:
@@ -616,7 +622,7 @@ class StudentManagementFrame(ttk.Frame):
             messagebox.showerror("Error", f"Failed to save student: {str(e)}")
     
     def send_registration_confirmation(self):
-        """Send registration confirmation message via WhatsApp"""
+        """Send comprehensive student and subscription details via WhatsApp"""
         if not self.current_student_id:
             messagebox.showwarning("Warning", "Please select a student first")
             return
@@ -628,39 +634,87 @@ class StudentManagementFrame(ttk.Frame):
                 messagebox.showerror("Error", "Student not found")
                 return
             
-            # Get the most recent subscription for this student
+            # Get all subscriptions for this student (including expired ones)
             from models.subscription import Subscription
-            subscriptions = Subscription.get_by_student_id(self.current_student_id)
+            subscriptions = Subscription.get_by_student_id(self.current_student_id, active_only=False)
             if not subscriptions:
                 messagebox.showwarning("Warning", "No subscriptions found for this student")
                 return
             
-            # Get the latest subscription
-            latest_subscription = subscriptions[0]  # Assuming they're ordered by date
-            
-            # Get additional data
-            from models.seat import Seat
-            from models.timeslot import Timeslot
-            seat = Seat.get_by_id(latest_subscription.seat_id)
-            timeslot = Timeslot.get_by_id(latest_subscription.timeslot_id)
-            
-            # Prepare student data
+            # Prepare comprehensive student data
             student_data = {
                 'name': student.name,
                 'father_name': student.father_name,
                 'mobile_number': student.mobile_number,
-                'registration_date': student.registration_date.strftime('%Y-%m-%d')
+                'registration_date': student.registration_date.strftime('%Y-%m-%d') if hasattr(student.registration_date, 'strftime') else str(student.registration_date),
+                'email': student.email or 'N/A',
+                'aadhaar_number': student.aadhaar_number or 'N/A',
+                'locker_number': student.locker_number or 'N/A'
             }
             
-            # Prepare subscription data
-            subscription_data = {
-                'receipt_number': latest_subscription.receipt_number,
-                'seat_number': seat.seat_number if seat else 'N/A',
-                'timeslot_name': f"{timeslot.name} ({timeslot.start_time} - {timeslot.end_time})" if timeslot else 'N/A',
-                'start_date': latest_subscription.start_date.strftime('%Y-%m-%d'),
-                'end_date': latest_subscription.end_date.strftime('%Y-%m-%d'),
-                'amount_paid': latest_subscription.amount_paid
-            }
+            # Prepare all subscription details with comprehensive information
+            subscription_details = []
+            from models.seat import Seat
+            from models.timeslot import Timeslot
+            from datetime import datetime
+            
+            total_amount = 0
+            active_count = 0
+            expired_count = 0
+            
+            for subscription in subscriptions:
+                # Skip inactive/deleted subscriptions but include expired ones
+                if not subscription.is_active:
+                    continue
+                    
+                seat = Seat.get_by_id(subscription.seat_id)
+                timeslot = Timeslot.get_by_id(subscription.timeslot_id)
+                
+                # Check if subscription is active
+                today = datetime.now().date()
+                end_date = subscription.end_date
+                if isinstance(end_date, str):
+                    end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+                
+                # Determine status more accurately
+                start_date = subscription.start_date
+                if isinstance(start_date, str):
+                    start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+                
+                if today < start_date:
+                    status = 'Upcoming'
+                elif start_date <= today <= end_date:
+                    status = 'Active'
+                else:
+                    status = 'Expired'
+                
+                if status == 'Active':
+                    active_count += 1
+                elif status == 'Upcoming':
+                    active_count += 1  # Count upcoming as active
+                else:
+                    expired_count += 1
+                
+                total_amount += float(subscription.amount_paid)
+                
+                # Calculate duration in days and months
+                duration_days = (end_date - start_date).days + 1
+                duration_months = round(duration_days / 30.0, 1)
+                
+                sub_detail = {
+                    'receipt_number': subscription.receipt_number,
+                    'seat_number': seat.id if seat else 'N/A',
+                    'seat_row': f"Row {seat.row_number}" if seat and hasattr(seat, 'row_number') else '',
+                    'timeslot_name': f"{timeslot.name} ({timeslot.start_time} - {timeslot.end_time})" if timeslot else 'N/A',
+                    'start_date': subscription.start_date.strftime('%Y-%m-%d') if hasattr(subscription.start_date, 'strftime') else str(subscription.start_date),
+                    'end_date': subscription.end_date.strftime('%Y-%m-%d') if hasattr(subscription.end_date, 'strftime') else str(subscription.end_date),
+                    'amount_paid': subscription.amount_paid,
+                    'status': status,
+                    'duration_days': duration_days,
+                    'duration_months': duration_months,
+                    'created_date': subscription.created_at.strftime('%Y-%m-%d') if hasattr(subscription.created_at, 'strftime') else str(subscription.created_at) if subscription.created_at else 'N/A'
+                }
+                subscription_details.append(sub_detail)
             
             # Import and use WhatsApp automation
             from utils.whatsapp_automation import WhatsAppAutomation
@@ -673,24 +727,107 @@ class StudentManagementFrame(ttk.Frame):
                         messagebox.showerror("Error", "WhatsApp automation is not initialized. Please initialize WhatsApp first.")
                         return
                     
-                    # Send registration confirmation
-                    success, message = whatsapp.send_registration_confirmation(student_data, subscription_data)
+                    # Create comprehensive message with enhanced details
+                    message = f"""📚 *{student_data['name']} - Complete Profile*
+
+👤 *Student Information:*
+• Name: {student_data['name']}
+• Father's Name: {student_data['father_name']}
+• Mobile: {student_data['mobile_number']}
+• Email: {student_data['email']}
+• Aadhaar: {student_data['aadhaar_number']}
+• Registration Date: {student_data['registration_date']}
+• Locker: {student_data['locker_number']}
+
+� *Subscription Summary:*
+• Total Subscriptions: {len(subscription_details)}
+• Active/Upcoming: {active_count}
+• Expired: {expired_count}
+• Total Amount Paid: ₹{total_amount:.2f}
+
+📝 *Complete Subscription History:*"""
+
+                    for i, sub in enumerate(subscription_details, 1):
+                        if sub['status'] == 'Active':
+                            status_emoji = "✅"
+                        elif sub['status'] == 'Upcoming':
+                            status_emoji = "🔜"
+                        else:
+                            status_emoji = "❌"
+                        
+                        seat_info = f"Seat {sub['seat_number']}"
+                        if sub['seat_row']:
+                            seat_info += f" ({sub['seat_row']})"
+                        
+                        message += f"""
+
+{i}. {status_emoji} *Receipt: {sub['receipt_number']}*
+   • {seat_info}
+   • Timeslot: {sub['timeslot_name']}
+   • Duration: {sub['start_date']} to {sub['end_date']}
+   • Period: {sub['duration_months']} months ({sub['duration_days']} days)
+   • Amount: ₹{sub['amount_paid']}
+   • Status: {sub['status']}
+   • Registered: {sub['created_date']}"""
+
+                    # Add current active subscription details if any
+                    current_active = [sub for sub in subscription_details if sub['status'] == 'Active']
+                    if current_active:
+                        message += f"""
+
+🎯 *Current Active Subscription(s):*"""
+                        for sub in current_active:
+                            days_remaining = (datetime.strptime(sub['end_date'], '%Y-%m-%d').date() - datetime.now().date()).days
+                            message += f"""
+• Seat {sub['seat_number']} - {sub['timeslot_name']}
+• Valid until: {sub['end_date']} ({days_remaining} days remaining)"""
+
+                    message += f"""
+
+📍 *{LIBRARY_NAME}*
+📞 {LIBRARY_PHONE}
+📧 {LIBRARY_EMAIL}
+🏢 {LIBRARY_ADDRESS}
+
+Thank you for being part of our library family! 📚✨
+
+_This message contains complete subscription history for {student_data['name']}_"""
+
+                    # Send comprehensive message
+                    success, result = whatsapp.send_message(student_data['mobile_number'], message)
                     
                     if success:
-                        messagebox.showinfo("Success", f"Registration confirmation sent to {student_data['name']}")
+                        messagebox.showinfo("Success", f"Comprehensive details sent to {student_data['name']}")
                     else:
-                        messagebox.showerror("Error", f"Failed to send message: {message}")
+                        messagebox.showerror("Error", f"Failed to send message: {result}")
                         
                 except Exception as e:
                     messagebox.showerror("Error", f"Failed to send WhatsApp message: {str(e)}")
             
-            # Confirm before sending
-            if messagebox.askyesno("Confirm", f"Send registration confirmation to {student_data['name']} ({student_data['mobile_number']})?"):
+            # Import library settings for message
+            from config.settings import LIBRARY_NAME, LIBRARY_PHONE, LIBRARY_EMAIL, LIBRARY_ADDRESS
+            
+            # Confirm before sending with detailed summary
+            active_subs = [sub for sub in subscription_details if sub['status'] in ['Active', 'Upcoming']]
+            expired_subs = [sub for sub in subscription_details if sub['status'] == 'Expired']
+            
+            confirmation_msg = f"""Send complete profile to {student_data['name']} ({student_data['mobile_number']})?
+
+📊 Summary to be sent:
+• Student Information: Complete profile
+• Total Subscriptions: {len(subscription_details)}
+• Active/Upcoming: {len(active_subs)}
+• Expired: {len(expired_subs)}
+• Total Amount: ₹{total_amount:.2f}
+
+This will send ALL subscription history and current status."""
+            
+            if messagebox.askyesno("Confirm WhatsApp Message", confirmation_msg):
                 import threading
                 threading.Thread(target=send_message_thread, daemon=True).start()
                 
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to send registration confirmation: {str(e)}")
+            messagebox.showerror("Error", f"Failed to send comprehensive details: {str(e)}")
     
     def select_student_by_id(self, student_id):
         """Select a student in the tree by their ID"""
@@ -883,23 +1020,19 @@ class StudentManagementFrame(ttk.Frame):
         """Generate comprehensive receipt showing all subscriptions of selected student"""
         try:
             # Check if a student is selected
-            selection = self.student_tree.selection()
-            if not selection:
+            if not self.current_student_id:
                 messagebox.showwarning("Warning", "Please select a student to generate comprehensive receipt")
                 return
             
             # Get selected student
-            item = self.student_tree.item(selection[0])
-            student_id = item['values'][0]
-            
-            student = Student.get_by_id(student_id)
+            student = Student.get_by_id(self.current_student_id)
             if not student:
                 messagebox.showerror("Error", "Student not found")
                 return
             
             # Get all subscriptions for this student
-            from utils.database_manager import DatabaseOperations
-            db_ops = DatabaseOperations()
+            from utils.database_manager import DatabaseManager
+            db_manager = DatabaseManager()
             
             # Query to get all subscription details
             query = '''
@@ -908,7 +1041,10 @@ class StudentManagementFrame(ttk.Frame):
                     ss.amount_paid, ss.created_at,
                     seat.id as seat_number,
                     t.name as timeslot_name, t.start_time, t.end_time,
-                    CASE WHEN ss.end_date >= date('now') THEN 'Active' ELSE 'Expired' END as status
+                    CASE 
+                        WHEN DATE(ss.end_date) >= DATE('now') THEN 'Active' 
+                        ELSE 'Expired' 
+                    END as status
                 FROM student_subscriptions ss
                 JOIN seats seat ON ss.seat_id = seat.id
                 JOIN timeslots t ON ss.timeslot_id = t.id
@@ -916,7 +1052,21 @@ class StudentManagementFrame(ttk.Frame):
                 ORDER BY ss.start_date DESC
             '''
             
-            subscriptions_data = [dict(row) for row in db_ops.db_manager.execute_query(query, (student_id,))]
+            subscriptions_data = []
+            for row in db_manager.execute_query(query, (self.current_student_id,)):
+                subscriptions_data.append({
+                    'id': row[0],
+                    'receipt_number': row[1],
+                    'start_date': row[2],
+                    'end_date': row[3],
+                    'amount_paid': row[4],
+                    'created_at': row[5],
+                    'seat_number': row[6],
+                    'timeslot_name': row[7],
+                    'start_time': row[8],
+                    'end_time': row[9],
+                    'status': row[10]
+                })
             
             if not subscriptions_data:
                 messagebox.showinfo("Info", "No subscriptions found for this student")
@@ -929,12 +1079,12 @@ class StudentManagementFrame(ttk.Frame):
                 'mobile_number': student.mobile_number,
                 'email': student.email or '',
                 'aadhaar_number': student.aadhaar_number or '',
-                'registration_date': student.registration_date
+                'registration_date': student.registration_date.strftime('%Y-%m-%d') if hasattr(student.registration_date, 'strftime') else str(student.registration_date)
             }
             
             # Generate comprehensive receipt
-            from utils.pdf_generator import ReceiptGenerator
-            generator = ReceiptGenerator()
+            from utils.pdf_generator import PDFGenerator
+            generator = PDFGenerator()
             
             success, result = generator.generate_student_comprehensive_receipt(
                 student_data, subscriptions_data
@@ -950,8 +1100,17 @@ class StudentManagementFrame(ttk.Frame):
                 # Ask if user wants to open the file
                 if messagebox.askyesno("Open Receipt", "Would you like to open the receipt now?"):
                     try:
+                        import os
                         import subprocess
-                        subprocess.run(['xdg-open', result], check=False)
+                        import platform
+                        
+                        # Cross-platform file opening
+                        if platform.system() == 'Windows':
+                            os.startfile(result)
+                        elif platform.system() == 'Darwin':  # macOS
+                            subprocess.run(['open', result], check=False)
+                        else:  # Linux and others
+                            subprocess.run(['xdg-open', result], check=False)
                     except Exception as e:
                         messagebox.showwarning("Warning", f"Could not open file automatically: {e}")
                         
@@ -960,6 +1119,7 @@ class StudentManagementFrame(ttk.Frame):
                 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to generate comprehensive receipt: {str(e)}")
+            import logging
             logging.error(f"Comprehensive receipt generation error: {e}")
     
     def renew_subscription(self):
@@ -998,6 +1158,8 @@ class StudentManagementFrame(ttk.Frame):
             # Find and set the timeslot
             for display_name, ts in self.timeslots.items():
                 if ts.id == timeslot.id:
+                    self.timeslot_var.set(display_name)
+                    break
                     self.timeslot_var.set(display_name)
                     break
             
