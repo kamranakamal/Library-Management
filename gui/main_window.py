@@ -95,6 +95,9 @@ class MainWindow:
         # When timeslots are updated, refresh student management
         self.timeslot_frame.set_refresh_callback(self.student_frame.refresh)
         
+        # When subscriptions are updated, refresh analytics
+        self.student_frame.set_analytics_refresh_callback(self.refresh_analytics)
+        
         # Book Management tab
         self.book_frame = BookManagementFrame(self.notebook)
         self.notebook.add(self.book_frame, text="Book Management")
@@ -224,6 +227,14 @@ class MainWindow:
                 self.analytics_frame.refresh()
         except Exception as e:
             print(f"Error refreshing frames: {e}")
+    
+    def refresh_analytics(self):
+        """Refresh analytics frame specifically"""
+        try:
+            if hasattr(self.analytics_frame, 'refresh'):
+                self.analytics_frame.refresh()
+        except Exception as e:
+            print(f"Error refreshing analytics: {e}")
     
     def show_about(self):
         """Show about dialog"""

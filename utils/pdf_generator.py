@@ -3,11 +3,8 @@ PDF receipt generation utilities
 """
 
 import os
-import tempfile
 from datetime import datetime
 from fpdf import FPDF
-import qrcode
-from PIL import Image
 from config.settings import (RECEIPTS_DIR, DEFAULT_CURRENCY, APP_NAME, 
                            LIBRARY_NAME, LIBRARY_PHONE, LIBRARY_EMAIL, LIBRARY_ADDRESS, LIBRARY_WEBSITE)
 
@@ -17,37 +14,6 @@ class PDFGenerator:
     
     def __init__(self):
         self.pdf = None
-        
-    def _generate_qr_code(self, data, size=(30, 30)):
-        """Generate QR code and save as temporary image file"""
-        try:
-            qr = qrcode.QRCode(
-                version=1,
-                error_correction=qrcode.constants.ERROR_CORRECT_L,
-                box_size=10,
-                border=4,
-            )
-            qr.add_data(data)
-            qr.make(fit=True)
-            
-            img = qr.make_image(fill_color="black", back_color="white")
-            img = img.resize(size, Image.LANCZOS)
-            
-            # Save to temporary file
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-            img.save(temp_file.name)
-            return temp_file.name
-        except Exception as e:
-            print(f"Error generating QR code: {e}")
-            return None
-    
-    def _cleanup_temp_file(self, filepath):
-        """Clean up temporary file"""
-        try:
-            if filepath and os.path.exists(filepath):
-                os.unlink(filepath)
-        except Exception as e:
-            print(f"Error cleaning up temp file: {e}")
     
     def ensure_receipts_directory(self):
         """Ensure receipts directory exists"""

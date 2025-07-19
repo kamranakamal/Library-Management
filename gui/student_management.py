@@ -25,9 +25,14 @@ class StudentManagementFrame(ttk.Frame):
         self.timeslots = {}
         self.available_seats = {}
         self.current_student_id = None
+        self.analytics_refresh_callback = None
         
         self.setup_ui()
         self.load_data()
+    
+    def set_analytics_refresh_callback(self, callback):
+        """Set callback function to refresh analytics"""
+        self.analytics_refresh_callback = callback
     
     def set_today_date(self):
         """Set registration date to today"""
@@ -1050,6 +1055,10 @@ class StudentManagementFrame(ttk.Frame):
                 student_id = student_item['values'][0]
                 self.load_student_subscriptions(student_id)
                 self.load_students()  # Refresh student list to update subscription count
+                
+                # Refresh analytics if callback is set
+                if self.analytics_refresh_callback:
+                    self.analytics_refresh_callback()
     
     def delete_subscription(self):
         """Delete selected subscription"""
@@ -1397,9 +1406,7 @@ class SubscriptionRenewalDialog(tk.Toplevel):
                 timeslot_id=self.subscription.timeslot_id,
                 start_date=str(current_end + timedelta(days=1)),
                 end_date=str(new_end),
-                amount_paid=amount,
-                payment_date=str(date.today()),
-                is_active=True
+                amount_paid=amount
             )
             
             new_subscription.save()
