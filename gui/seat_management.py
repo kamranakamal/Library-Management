@@ -84,8 +84,9 @@ class SeatManagementFrame(ttk.Frame):
         self.update_btn = ttk.Button(button_frame, text="Update Gender", command=self.update_seat_gender)
         self.update_btn.pack(side='left', padx=5)
         
-        self.delete_btn = ttk.Button(button_frame, text="Delete Seat", command=self.delete_seat)
-        self.delete_btn.pack(side='left', padx=5)
+        # SEAT DELETION PERMANENTLY DISABLED FOR DATA PROTECTION
+        # self.delete_btn = ttk.Button(button_frame, text="Delete Seat", command=self.delete_seat)
+        # self.delete_btn.pack(side='left', padx=5)
         
         ttk.Button(button_frame, text="View Occupancy", command=self.view_seat_occupancy).pack(side='left', padx=5)
         ttk.Button(button_frame, text="Clear Selection", command=self.clear_selection).pack(side='left', padx=5)
@@ -96,11 +97,12 @@ class SeatManagementFrame(ttk.Frame):
         
         ttk.Button(diagnostic_frame, text="Diagnose Seat", command=self.diagnose_seat_occupancy).pack(side='left', padx=5)
         ttk.Button(diagnostic_frame, text="Cleanup Expired", command=self.cleanup_expired_subscriptions).pack(side='left', padx=5)
+        ttk.Button(diagnostic_frame, text="Recover Deleted Seats", command=self.recover_deleted_seats).pack(side='left', padx=5)
         
         # Initially disable all buttons
         self.save_btn.config(state='disabled')
         self.update_btn.config(state='disabled')
-        self.delete_btn.config(state='disabled')
+        # delete_btn removed for data protection
         
         # Occupancy Details
         occupancy_frame = ttk.LabelFrame(editor_frame, text="Current Occupancy", padding=10)
@@ -346,12 +348,12 @@ class SeatManagementFrame(ttk.Frame):
             if occupied:
                 self.status_var.set("Currently Occupied - Cannot Edit")
                 self.update_btn.config(state='disabled')
-                self.delete_btn.config(state='disabled')
+                # delete_btn removed for data protection
                 self.gender_combo.config(state='disabled')
             else:
                 self.status_var.set("Available - Can Edit")
                 self.update_btn.config(state='normal')
-                self.delete_btn.config(state='normal')
+                # delete_btn removed for data protection
                 self.gender_combo.config(state='readonly')
             
             # Load occupancy details
@@ -371,7 +373,7 @@ class SeatManagementFrame(ttk.Frame):
             self.gender_combo.config(state='disabled')
             self.save_btn.config(state='disabled')
             self.update_btn.config(state='disabled')
-            self.delete_btn.config(state='disabled')
+            # delete_btn removed for data protection
             self.status_var.set("Select a seat to edit")
             self.clear_selection()
         
@@ -382,7 +384,7 @@ class SeatManagementFrame(ttk.Frame):
             self.gender_combo.config(state='readonly')
             self.save_btn.config(state='normal')
             self.update_btn.config(state='disabled')
-            self.delete_btn.config(state='disabled')
+            # delete_btn removed for data protection
             self.status_var.set("Enter new seat details")
             self.clear_selection()
     
@@ -589,13 +591,13 @@ class SeatManagementFrame(ttk.Frame):
             self.status_var.set("Select a seat to edit")
             self.update_btn.config(state='disabled')
             self.save_btn.config(state='disabled')
-            self.delete_btn.config(state='disabled')
+            # delete_btn removed for data protection
             self.gender_combo.config(state='disabled')
         elif mode == "add":
             self.status_var.set("Enter new seat details")
             self.update_btn.config(state='disabled')
             self.save_btn.config(state='normal')
-            self.delete_btn.config(state='disabled')
+            # delete_btn removed for data protection
             self.gender_combo.config(state='readonly')
         
         # Clear occupancy tree
@@ -645,42 +647,16 @@ class SeatManagementFrame(ttk.Frame):
             messagebox.showerror("Error", f"Failed to reset seats: {str(e)}")
     
     def delete_seat(self):
-        """Delete the selected seat"""
-        seat_id = self.seat_id_var.get()
-        if not seat_id:
-            messagebox.showwarning("Warning", "Please select a seat to delete")
-            return
-        
-        try:
-            seat = Seat.get_by_id(int(seat_id))
-            if not seat:
-                messagebox.showerror("Error", "Seat not found")
-                return
-            
-            # Double-check if seat is occupied (safety check)
-            if self.is_seat_occupied(seat.id):
-                messagebox.showerror("Error", 
-                    f"Cannot delete seat {seat.id} - it is currently occupied by active subscriptions.\n"
-                    f"Please wait for all subscriptions to expire or deactivate them first.")
-                return
-            
-            # Confirm deletion
-            if not messagebox.askyesno("Confirmation", 
-                f"Are you sure you want to delete seat {seat.id}?\n\n"
-                f"This action cannot be undone!"):
-                return
-            
-            # Delete seat from database
-            query = "UPDATE seats SET is_active = 0 WHERE id = ?"
-            seat.db_manager.execute_query(query, (seat.id,))
-            
-            messagebox.showinfo("Success", f"Seat {seat.id} has been deleted successfully!")
-            
-            # Refresh the display and clear selection
-            self.load_data()
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to delete seat: {str(e)}")
+        """SEAT DELETION IS PERMANENTLY DISABLED FOR DATA PROTECTION"""
+        messagebox.showerror("Feature Disabled", 
+            "Seat deletion has been permanently disabled to protect library data.\n\n"
+            "Seats cannot be deleted to prevent accidental loss of:\n"
+            "• Student subscription history\n"
+            "• Revenue tracking data\n"
+            "• Occupancy statistics\n\n"
+            "If you need to modify seats, use the 'Update Gender' option instead.\n"
+            "Contact system administrator if seat changes are absolutely necessary.")
+        return
     
     def refresh(self):
         """Refresh the seat management interface"""
@@ -819,3 +795,140 @@ class SeatManagementFrame(ttk.Frame):
                 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to diagnose seat: {str(e)}")
+    
+    def recover_deleted_seats(self):
+        """Show dialog to recover accidentally deleted seats"""
+        try:
+            deleted_seats = Seat.get_deleted_seats()
+            
+            if not deleted_seats:
+                messagebox.showinfo("No Deleted Seats", "No deleted seats found to recover.")
+                return
+            
+            # Create recovery dialog
+            recovery_window = tk.Toplevel()
+            recovery_window.title("Recover Deleted Seats")
+            recovery_window.geometry("500x400")
+            recovery_window.resizable(True, True)
+            
+            # Make dialog modal
+            recovery_window.transient(self)
+            recovery_window.grab_set()
+            
+            # Center the dialog
+            recovery_window.update_idletasks()
+            x = (recovery_window.winfo_screenwidth() // 2) - (250)
+            y = (recovery_window.winfo_screenheight() // 2) - (200)
+            recovery_window.geometry(f"500x400+{x}+{y}")
+            
+            # Header
+            header_frame = ttk.Frame(recovery_window)
+            header_frame.pack(fill='x', padx=10, pady=10)
+            
+            ttk.Label(header_frame, text="Deleted Seats Recovery", 
+                     font=('Arial', 12, 'bold')).pack()
+            ttk.Label(header_frame, text="Select seats to restore:", 
+                     font=('Arial', 10)).pack(pady=(5,0))
+            
+            # Seats list with checkboxes
+            list_frame = ttk.Frame(recovery_window)
+            list_frame.pack(fill='both', expand=True, padx=10, pady=5)
+            
+            # Create treeview for deleted seats
+            columns = ('Seat ID', 'Row', 'Gender', 'Subscriptions')
+            tree = ttk.Treeview(list_frame, columns=columns, show='headings', height=10)
+            
+            for col in columns:
+                tree.heading(col, text=col)
+                tree.column(col, width=100)
+            
+            # Scrollbar
+            scrollbar = ttk.Scrollbar(list_frame, orient='vertical', command=tree.yview)
+            tree.configure(yscrollcommand=scrollbar.set)
+            
+            tree.pack(side='left', fill='both', expand=True)
+            scrollbar.pack(side='right', fill='y')
+            
+            # Populate with deleted seats
+            for seat in deleted_seats:
+                # Check historical subscriptions
+                sub_query = '''
+                    SELECT COUNT(*) as count FROM student_subscriptions 
+                    WHERE seat_id = ?
+                '''
+                result = seat.db_manager.execute_query(sub_query, (seat.id,))
+                sub_count = result[0]['count'] if result else 0
+                
+                tree.insert('', 'end', values=(
+                    seat.id,
+                    seat.row_number,
+                    seat.gender_restriction,
+                    f"{sub_count} historical"
+                ))
+            
+            # Buttons frame
+            button_frame = ttk.Frame(recovery_window)
+            button_frame.pack(fill='x', padx=10, pady=10)
+            
+            def restore_selected():
+                selection = tree.selection()
+                if not selection:
+                    messagebox.showwarning("No Selection", "Please select seats to restore.")
+                    return
+                
+                restored_count = 0
+                failed_count = 0
+                
+                for item in selection:
+                    try:
+                        seat_id = tree.item(item)['values'][0]
+                        Seat.restore_seat(seat_id)
+                        restored_count += 1
+                    except Exception as e:
+                        failed_count += 1
+                        print(f"Failed to restore seat {seat_id}: {e}")
+                
+                if restored_count > 0:
+                    messagebox.showinfo("Success", 
+                        f"Successfully restored {restored_count} seat(s).")
+                    recovery_window.destroy()
+                    self.load_data()  # Refresh the main interface
+                
+                if failed_count > 0:
+                    messagebox.showwarning("Partial Success", 
+                        f"Failed to restore {failed_count} seat(s).")
+            
+            def restore_all():
+                if messagebox.askyesno("Confirm", 
+                    f"Are you sure you want to restore ALL {len(deleted_seats)} deleted seats?"):
+                    
+                    restored_count = 0
+                    failed_count = 0
+                    
+                    for seat in deleted_seats:
+                        try:
+                            Seat.restore_seat(seat.id)
+                            restored_count += 1
+                        except Exception as e:
+                            failed_count += 1
+                            print(f"Failed to restore seat {seat.id}: {e}")
+                    
+                    if restored_count > 0:
+                        messagebox.showinfo("Success", 
+                            f"Successfully restored {restored_count} seat(s).")
+                        recovery_window.destroy()
+                        self.load_data()  # Refresh the main interface
+                    
+                    if failed_count > 0:
+                        messagebox.showwarning("Partial Success", 
+                            f"Failed to restore {failed_count} seat(s).")
+            
+            ttk.Button(button_frame, text="Restore Selected", 
+                      command=restore_selected).pack(side='left', padx=5)
+            ttk.Button(button_frame, text="Restore All", 
+                      command=restore_all).pack(side='left', padx=5)
+            ttk.Button(button_frame, text="Cancel", 
+                      command=recovery_window.destroy).pack(side='right', padx=5)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load deleted seats: {str(e)}")

@@ -55,6 +55,50 @@ class Seat:
         self.db_manager.execute_query(query, params)
         return self.id
     
+    def delete(self):
+        """SEAT DELETION IS PERMANENTLY DISABLED FOR DATA PROTECTION"""
+        import logging
+        logging.error(f"SEAT DELETION BLOCKED: Attempt to delete seat {self.id} - ALL SEAT DELETION IS DISABLED")
+        
+        raise ValueError(
+            f"Seat deletion is permanently disabled for data protection.\n\n"
+            f"Seats cannot be deleted to prevent accidental loss of:\n"
+            f"• Student subscription history\n"
+            f"• Revenue tracking data\n"
+            f"• Occupancy statistics\n\n"
+            f"Contact system administrator if seat changes are absolutely necessary."
+        )
+
+    @classmethod
+    def restore_seat(cls, seat_id):
+        """Restore a previously deleted seat"""
+        db_manager = DatabaseManager()
+        
+        # Check if seat exists in inactive state
+        query = "SELECT * FROM seats WHERE id = ? AND is_active = 0"
+        result = db_manager.execute_query(query, (seat_id,))
+        
+        if not result:
+            raise ValueError(f"Seat {seat_id} not found in deleted seats")
+        
+        # Restore the seat
+        restore_query = "UPDATE seats SET is_active = 1 WHERE id = ?"
+        db_manager.execute_query(restore_query, (seat_id,))
+        
+        # Log the restoration
+        import logging
+        logging.info(f"Seat {seat_id} was restored from deleted state")
+        
+        return cls._from_row(result[0])
+    
+    @classmethod
+    def get_deleted_seats(cls):
+        """Get all seats that have been deleted (for recovery purposes)"""
+        db_manager = DatabaseManager()
+        query = "SELECT * FROM seats WHERE is_active = 0 ORDER BY id"
+        results = db_manager.execute_query(query)
+        return [cls._from_row(row) for row in results]
+    
     @classmethod
     def get_by_id(cls, seat_id):
         """Get seat by ID"""
