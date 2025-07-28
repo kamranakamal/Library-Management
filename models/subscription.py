@@ -325,13 +325,19 @@ class Subscription:
                    f"({conflict['timeslot_name']}) from {conflict['start_date']} to {conflict['end_date']}")
         return "Conflicts with existing subscription"
     
-    def renew(self, months=None):
+    def renew(self, months=None, amount=None):
         """Renew subscription for specified months"""
         if not months:
             # Get timeslot duration
             from models.timeslot import Timeslot
             timeslot = Timeslot.get_by_id(self.timeslot_id)
             months = timeslot.duration_months if timeslot else 1
+        
+        # Get the renewal amount (either provided or from timeslot price)
+        if amount is None:
+            from models.timeslot import Timeslot
+            timeslot = Timeslot.get_by_id(self.timeslot_id)
+            amount = timeslot.price if timeslot else 0
         
         # Create new subscription starting from current end date
         from dateutil.relativedelta import relativedelta
@@ -343,7 +349,7 @@ class Subscription:
             timeslot_id=self.timeslot_id,
             start_date=self.end_date,
             end_date=new_end_date,
-            amount_paid=self.amount_paid
+            amount_paid=amount  # Use new amount, not previous amount
         )
         
         return new_subscription.save()

@@ -1644,7 +1644,7 @@ class SubscriptionRenewalDialog(tk.Toplevel):
             
             # Update the existing subscription instead of creating new one
             self.subscription.end_date = str(new_end)
-            self.subscription.amount_paid = float(self.subscription.amount_paid) + amount  # Add to existing amount
+            self.subscription.amount_paid = amount  # Set to new renewal amount only (not accumulating)
             self.subscription.is_active = True  # Ensure it's active
             
             # Save the updated subscription
