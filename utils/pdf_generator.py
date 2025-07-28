@@ -5,6 +5,16 @@ PDF receipt generation utilities
 import os
 from datetime import datetime
 from fpdf import FPDF
+from datetime import datetime
+
+class CustomFPDF(FPDF):
+    """Custom FPDF class to include a footer"""
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
+        self.set_x(10) # Reset x position
+        self.cell(0, 10, f"Generated on: {datetime.now().strftime('%d/%m/%Y %H:%M')}", 0, 0, 'L')
 import qrcode
 from io import BytesIO
 from config.settings import (RECEIPTS_DIR, DEFAULT_CURRENCY, APP_NAME, 
@@ -78,7 +88,7 @@ class PDFGenerator:
         """Generate PDF receipt for subscription from data dictionary"""
         try:
             # Create PDF
-            pdf = FPDF()
+            pdf = CustomFPDF()
             pdf.add_page()
             pdf.set_font('Arial', 'B', 16)
             
@@ -204,408 +214,23 @@ class PDFGenerator:
             # Move cursor below QR codes
             pdf.set_y(qr_y + 45)
             
-            # Footer
-            pdf.set_font('Arial', 'I', 10)
-            pdf.cell(0, 6, 'Thank you for choosing our library!', 0, 1, 'C')
-            pdf.cell(0, 6, f'Generated on: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
-            
             # Save PDF
             filename = custom_filename or f"receipt_{subscription_data['receipt_number']}.pdf"
             filepath = os.path.join(RECEIPTS_DIR, filename)
             pdf.output(filepath)
-            
-            return True, filepath
-            
-        except Exception as e:
-            return False, f"Error generating receipt: {str(e)}"
-    
-    def generate_renewal_receipt(self, new_subscription, student, seat, timeslot, filename=None):
-        """Generate PDF receipt for subscription renewal - Compatible interface"""
-        try:
-            # Convert objects to data dictionary format
-            renewal_data = {
-                'receipt_number': new_subscription.receipt_number,
-                'previous_receipt_number': 'N/A',  # This would need to be passed if available
-                'student_name': student.name,
-                'mobile_number': student.mobile_number,
-                'seat_id': seat.id,  # Changed from seat.seat_number to seat.id
-                'timeslot_name': timeslot.name,
-                'timeslot_time': f"{timeslot.start_time} - {timeslot.end_time}",  # Added timeslot time
-                'previous_start': 'N/A',  # These would need to be calculated
-                'previous_end': 'N/A',
-                'new_start': new_subscription.start_date,
-                'new_end': new_subscription.end_date,
-                'amount_paid': new_subscription.amount_paid
-            }
-            
-            return self._generate_renewal_receipt_from_data(renewal_data, filename)
-            
-        except Exception as e:
-            return False, f"Error generating renewal receipt: {str(e)}"
-    
-    def _generate_renewal_receipt_from_data(self, renewal_data, custom_filename=None):
-        """Generate PDF receipt for subscription renewal from data dictionary"""
-        try:
-            # Create PDF
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font('Arial', 'B', 16)
-            
-            # Header
-            pdf.set_font('Arial', 'B', 18)
-            pdf.cell(0, 10, LIBRARY_NAME, 0, 1, 'C')
-            
-            pdf.set_font('Arial', '', 10)
-            pdf.cell(0, 6, LIBRARY_ADDRESS, 0, 1, 'C')
-            pdf.cell(0, 6, f"Phone: {LIBRARY_PHONE} | Email: {LIBRARY_EMAIL}", 0, 1, 'C')
-            
-            pdf.ln(5)
-            pdf.set_font('Arial', 'B', 14)
-            pdf.cell(0, 10, 'Subscription Renewal Receipt', 0, 1, 'C')
-            pdf.ln(10)
-            
-            # Receipt details
-            pdf.set_font('Arial', '', 12)
-            
-            # Receipt number and date
-            pdf.cell(0, 8, f"Renewal Receipt No: {renewal_data['receipt_number']}", 0, 1)
-            pdf.cell(0, 8, f"Original Receipt No: {renewal_data['original_receipt']}", 0, 1)
-            pdf.cell(0, 8, f"Date: {datetime.now().strftime('%d/%m/%Y')}", 0, 1)
-            pdf.ln(5)
-            
-            # Student details
-            pdf.set_font('Arial', 'B', 12)
-            pdf.cell(0, 8, 'Student Details:', 0, 1)
-            pdf.set_font('Arial', '', 12)
-            
-            # Save Y position before student details
-            student_details_y = pdf.get_y()
-            
-            pdf.cell(0, 6, f"Name: {renewal_data['student_name']}", 0, 1)
-            pdf.cell(0, 6, f"Mobile: {renewal_data['mobile_number']}", 0, 1)
-            pdf.cell(0, 6, f"Seat Number: {renewal_data['seat_id']}", 0, 1)
-            pdf.cell(0, 6, f"Timeslot: {renewal_data['timeslot_name']}", 0, 1)
-            pdf.cell(0, 6, f"Time: {renewal_data['timeslot_time']}", 0, 1)
-            
-            pdf.ln(3)  # Small gap after student details
-            
-            # Renewal details
-            pdf.set_font('Arial', 'B', 12)
-            pdf.cell(0, 6, 'Renewal Details:', 0, 1)
-            pdf.set_font('Arial', '', 12)
-            
-            pdf.cell(0, 6, f"Previous End Date: {renewal_data['previous_end']}", 0, 1)
-            pdf.cell(0, 6, f"New End Date: {renewal_data['new_end']}", 0, 1)
-            pdf.cell(0, 6, f"Renewal Amount: {DEFAULT_CURRENCY}{renewal_data['renewal_amount']}", 0, 1)
-            pdf.cell(0, 6, f"Total Amount Paid: {DEFAULT_CURRENCY}{renewal_data['total_amount']}", 0, 1)
-            pdf.ln(10)
-            
-            # Add QR codes at the bottom
-            qr_y = pdf.get_y()
-            pdf.set_font('Arial', 'B', 10)
-            pdf.cell(0, 6, 'Quick Access:', 0, 1)
-            pdf.ln(2)
-            
-            # Website QR code
-            qr_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'sangharsh_library_qr.png')
-            if os.path.exists(qr_path):
-                try:
-                    # Position website QR code on the left
-                    pdf.image(qr_path, x=30, y=pdf.get_y(), w=25, h=25)
-                    
-                    # Add text below website QR code
-                    pdf.set_xy(20, pdf.get_y() + 26)
-                    pdf.set_font('Arial', '', 8)
-                    pdf.cell(45, 3, 'Visit our website', 0, 0, 'C')
-                    
-                    # Generate and add library rules QR code on the right
-                    library_rules_url = "https://www.notion.so/Sangharsh-Library-rules-235ed2a2852c80fa980cf28ceeb9f5f1"
-                    rules_qr_path = self.generate_qr_code(library_rules_url)
-                    if rules_qr_path:
-                        # Position library rules QR code on the right
-                        pdf.image(rules_qr_path, x=140, y=qr_y + 8, w=25, h=25)
-                        
-                        # Add text below library rules QR code
-                        pdf.set_xy(130, qr_y + 34)
-                        pdf.set_font('Arial', '', 8)
-                        pdf.cell(45, 3, 'Library rules & policies', 0, 0, 'C')
-                        
-                        # Clean up temporary QR code file
-                        try:
-                            os.remove(rules_qr_path)
-                        except:
-                            pass
-                            
-                except Exception as e:
-                    print(f"Error adding QR codes: {e}")
-            
-            # Move cursor below QR codes
+{{ ... }}
             pdf.set_y(qr_y + 45)
-            
-            # Footer
-            pdf.set_font('Arial', 'I', 10)
-            pdf.cell(0, 6, 'Thank you for renewing your subscription!', 0, 1, 'C')
-            pdf.cell(0, 6, f'Generated on: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
             
             # Save PDF
             filename = custom_filename or f"renewal_{renewal_data['receipt_number']}.pdf"
             filepath = os.path.join(RECEIPTS_DIR, filename)
             pdf.output(filepath)
-            
-            return True, filepath
-            
-        except Exception as e:
-            return False, f"Error generating renewal receipt: {str(e)}"
-    
-    def generate_monthly_report(self, month_data):
-        """Generate monthly financial report"""
-        try:
-            # Create PDF
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font('Arial', 'B', 16)
-            
-            # Header
-            pdf.set_font('Arial', 'B', 18)
-            pdf.cell(0, 10, LIBRARY_NAME, 0, 1, 'C')
-            
-            pdf.set_font('Arial', '', 10)
-            pdf.cell(0, 6, LIBRARY_ADDRESS, 0, 1, 'C')
-            pdf.cell(0, 6, f"Phone: {LIBRARY_PHONE} | Email: {LIBRARY_EMAIL}", 0, 1, 'C')
-            
-            pdf.ln(5)
-            pdf.set_font('Arial', 'B', 14)
-            pdf.cell(0, 10, f'Monthly Report - {month_data["month"]} {month_data["year"]}', 0, 1, 'C')
-            pdf.ln(10)
-            
-            # Summary
-            pdf.set_font('Arial', 'B', 12)
-            pdf.cell(0, 8, 'Summary:', 0, 1)
-            pdf.set_font('Arial', '', 12)
-            
-            pdf.cell(0, 8, f"Total Revenue: {DEFAULT_CURRENCY}{month_data['total_revenue']}", 0, 1)
-            pdf.cell(0, 8, f"New Registrations: {month_data['new_registrations']}", 0, 1)
-            pdf.cell(0, 8, f"Active Subscriptions: {month_data['active_subscriptions']}", 0, 1)
-            pdf.cell(0, 8, f"Book Borrowings: {month_data['book_borrowings']}", 0, 1)
-            pdf.ln(10)
-            
-            # Detailed breakdown if provided
-            if 'details' in month_data:
-                pdf.set_font('Arial', 'B', 12)
-                pdf.cell(0, 8, 'Detailed Breakdown:', 0, 1)
-                pdf.set_font('Arial', '', 10)
-                
-                for detail in month_data['details']:
-                    pdf.cell(0, 6, detail, 0, 1)
-            
-            # Save PDF
-            filename = f"monthly_report_{month_data['year']}_{month_data['month']:02d}.pdf"
-            filepath = os.path.join(RECEIPTS_DIR, filename)
-            pdf.output(filepath)
-            
-            return True, filepath
-            
-        except Exception as e:
-            return False, f"Error generating monthly report: {str(e)}"
-
-    def generate_student_comprehensive_receipt(self, student_data, subscriptions_data, filename=None):
-        """Generate comprehensive receipt showing all subscriptions of a student"""
-        try:
-            # Create filename if not provided
-            if not filename:
-                safe_name = student_data['name'].replace(' ', '_').replace('/', '_')
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"comprehensive_receipt_{safe_name}_{timestamp}.pdf"
-            
-            filepath = os.path.join(RECEIPTS_DIR, filename)
-            
-            # Create PDF
-            pdf = FPDF()
-            pdf.add_page()
-            
-            # Header
-            pdf.set_font('Arial', 'B', 18)
-            pdf.cell(0, 12, LIBRARY_NAME, 0, 1, 'C')
-            
-            pdf.set_font('Arial', '', 10)
-            pdf.cell(0, 6, LIBRARY_ADDRESS, 0, 1, 'C')
-            pdf.cell(0, 6, f"Phone: {LIBRARY_PHONE} | Email: {LIBRARY_EMAIL}", 0, 1, 'C')
-            
-            pdf.ln(8)
-            pdf.set_font('Arial', 'B', 16)
-            pdf.cell(0, 10, 'Comprehensive Subscription Receipt', 0, 1, 'C')
-            pdf.ln(8)
-            
-            # Receipt details
-            pdf.set_font('Arial', '', 12)
-            pdf.cell(0, 8, f"Generated on: {datetime.now().strftime('%d/%m/%Y at %H:%M')}", 0, 1)
-            pdf.ln(5)
-            
-            # Student details
-            pdf.set_font('Arial', 'B', 14)
-            pdf.cell(0, 10, 'Student Information:', 0, 1)
-            pdf.set_font('Arial', '', 12)
-            
-            # Save Y position before student details
-            student_details_y = pdf.get_y()
-            
-            pdf.cell(0, 6, f"Name: {student_data['name']}", 0, 1)
-            pdf.cell(0, 6, f"Father's Name: {student_data['father_name']}", 0, 1)
-            pdf.cell(0, 6, f"Mobile: {student_data['mobile_number']}", 0, 1)
-            if student_data.get('email'):
-                pdf.cell(0, 6, f"Email: {student_data['email']}", 0, 1)
-            if student_data.get('aadhaar_number'):
-                pdf.cell(0, 6, f"Aadhaar: {student_data['aadhaar_number']}", 0, 1)
-            pdf.cell(0, 6, f"Registration Date: {student_data['registration_date']}", 0, 1)
-            
-            # Move to next section with minimal spacing
-            pdf.ln(5)
-            
-            # Subscription summary
-            pdf.set_font('Arial', 'B', 14)
-            pdf.cell(0, 8, f'Subscription History ({len(subscriptions_data)} subscriptions):', 0, 1)
-            pdf.ln(3)
-            
-            # Table header
-            pdf.set_font('Arial', 'B', 9)
-            pdf.set_fill_color(230, 230, 230)
-            
-            # Column widths - optimized for compactness
-            col_widths = [12, 40, 28, 20, 22, 18, 25]
-            headers = ['S.No', 'Receipt No.', 'Timeslot', 'Seat', 'Duration', 'Amount', 'Status']
-            
-            # Print headers
-            for i, header in enumerate(headers):
-                pdf.cell(col_widths[i], 6, header, 1, 0, 'C', True)
-            pdf.ln()
-            
-            # Table data
-            pdf.set_font('Arial', '', 8)
-            total_amount = 0
-            active_count = 0
-            expired_count = 0
-            
-            for i, sub in enumerate(subscriptions_data, 1):
-                # Alternate row colors
-                if i % 2 == 0:
-                    pdf.set_fill_color(245, 245, 245)
-                else:
-                    pdf.set_fill_color(255, 255, 255)
-                
-                # Calculate duration in months
-                from datetime import datetime as dt
-                start = dt.strptime(sub['start_date'], '%Y-%m-%d')
-                end = dt.strptime(sub['end_date'], '%Y-%m-%d')
-                duration_days = (end - start).days + 1
-                duration_months = round(duration_days / 30.0, 1)
-                
-                # Status
-                today = dt.now().date()
-                end_date = dt.strptime(sub['end_date'], '%Y-%m-%d').date()
-                status = 'Active' if end_date >= today else 'Expired'
-                
-                if status == 'Active':
-                    active_count += 1
-                else:
-                    expired_count += 1
-                
-                total_amount += float(sub['amount_paid'])
-                
-                # Data for each column - more compact
-                row_data = [
-                    str(i),
-                    sub['receipt_number'][:10] + '..' if len(sub['receipt_number']) > 12 else sub['receipt_number'],
-                    sub['timeslot_name'][:22] + '..' if len(sub['timeslot_name']) > 25 else sub['timeslot_name'],
-                    str(sub['seat_number']),
-                    f"{duration_months}m",
-                    f"{DEFAULT_CURRENCY}{sub['amount_paid']:.0f}",
-                    status
-                ]
-                
-                # Print row with reduced height
-                for j, data in enumerate(row_data):
-                    pdf.cell(col_widths[j], 6, data, 1, 0, 'C', True)
-                pdf.ln()
-            
-            pdf.ln(3)
-            
-            # Summary section - more compact
-            pdf.set_font('Arial', 'B', 11)
-            pdf.cell(0, 6, 'Summary:', 0, 1)
-            pdf.set_font('Arial', '', 10)
-            
-            pdf.cell(0, 5, f"Total Subscriptions: {len(subscriptions_data)}", 0, 1)
-            pdf.cell(0, 5, f"Active Subscriptions: {active_count}", 0, 1)
-            pdf.cell(0, 5, f"Expired Subscriptions: {expired_count}", 0, 1)
-            pdf.cell(0, 5, f"Total Amount Paid: {DEFAULT_CURRENCY}{total_amount:.2f}", 0, 1)
-            
-            # Current active subscription details (if any) - more compact
-            current_subscriptions = [sub for sub in subscriptions_data if sub.get('status') == 'Active' or 
-                                   (dt.strptime(sub['end_date'], '%Y-%m-%d').date() >= dt.now().date())]
-            
-            if current_subscriptions:
-                pdf.ln(3)
-                pdf.set_font('Arial', 'B', 11)
-                pdf.cell(0, 6, 'Current Active Subscription(s):', 0, 1)
-                pdf.set_font('Arial', '', 10)
-                
-                for sub in current_subscriptions:
-                    pdf.cell(0, 5, f"- Seat {sub['seat_number']} - {sub['timeslot_name']} (Valid till {sub['end_date']})", 0, 1)
-            
-            pdf.ln(5)
-            
-            # Add QR codes at the bottom - more compact
-            qr_y = pdf.get_y()
-            pdf.set_font('Arial', 'B', 9)
-            pdf.cell(0, 5, 'Quick Access:', 0, 1)
-            pdf.ln(1)
-            
-            # Website QR code
-            qr_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'sangharsh_library_qr.png')
-            if os.path.exists(qr_path):
-                try:
-                    # Position website QR code on the left - smaller size
-                    pdf.image(qr_path, x=35, y=pdf.get_y(), w=20, h=20)
-                    
-                    # Add text below website QR code
-                    pdf.set_xy(25, pdf.get_y() + 21)
-                    pdf.set_font('Arial', '', 7)
-                    pdf.cell(40, 3, 'Visit our website', 0, 0, 'C')
-                    
-                    # Generate and add library rules QR code on the right - smaller and closer
-                    library_rules_url = "https://www.notion.so/Sangharsh-Library-rules-235ed2a2852c80fa980cf28ceeb9f5f1"
-                    rules_qr_path = self.generate_qr_code(library_rules_url)
-                    if rules_qr_path:
-                        # Position library rules QR code on the right
-                        pdf.image(rules_qr_path, x=135, y=qr_y + 6, w=20, h=20)
-                        
-                        # Add text below library rules QR code
-                        pdf.set_xy(125, qr_y + 27)
-                        pdf.set_font('Arial', '', 7)
-                        pdf.cell(40, 3, 'Library rules & policies', 0, 0, 'C')
-                        
-                        # Clean up temporary QR code file
-                        try:
-                            os.remove(rules_qr_path)
-                        except:
-                            pass
-                            
-                except Exception as e:
-                    print(f"Error adding QR codes: {e}")
-            
-            # Move cursor below QR codes - less space
+{{ ... }}
             pdf.set_y(qr_y + 32)
             
-            # Footer - more compact
-            pdf.set_font('Arial', 'I', 8)
-            pdf.cell(0, 4, f"Computer-generated receipt from {LIBRARY_NAME}", 0, 1, 'C')
-            pdf.cell(0, 4, f"Generated on {datetime.now().strftime('%d/%m/%Y at %H:%M')}", 0, 1, 'C')
-            pdf.ln(2)
-            pdf.cell(0, 4, "Thank you for choosing our library services!", 0, 1, 'C')
-            
             # Save PDF
             pdf.output(filepath)
-            
+{{ ... }}
             return True, filepath
             
         except Exception as e:
