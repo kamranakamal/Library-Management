@@ -5,7 +5,6 @@ PDF receipt generation utilities
 import os
 from datetime import datetime
 from fpdf import FPDF
-from datetime import datetime
 
 class CustomFPDF(FPDF):
     """Custom FPDF class to include a footer"""
@@ -218,23 +217,173 @@ class PDFGenerator:
             filename = custom_filename or f"receipt_{subscription_data['receipt_number']}.pdf"
             filepath = os.path.join(RECEIPTS_DIR, filename)
             pdf.output(filepath)
-{{ ... }}
-            pdf.set_y(qr_y + 45)
             
-            # Save PDF
-            filename = custom_filename or f"renewal_{renewal_data['receipt_number']}.pdf"
-            filepath = os.path.join(RECEIPTS_DIR, filename)
-            pdf.output(filepath)
-{{ ... }}
-            pdf.set_y(qr_y + 32)
-            
-            # Save PDF
-            pdf.output(filepath)
-{{ ... }}
             return True, filepath
             
         except Exception as e:
             return False, f"Error generating comprehensive receipt: {str(e)}"
+
+
+    def generate_student_comprehensive_receipt(self, student_data, subscriptions_data):
+        """Generate a comprehensive PDF receipt for a student, including all their subscriptions."""
+        try:
+            pdf = CustomFPDF()
+            pdf.add_page()
+
+            # Header
+            pdf.set_font('Arial', 'B', 18)
+            pdf.cell(0, 10, LIBRARY_NAME, border=0, ln=1, align='C')
+            pdf.set_font('Arial', '', 10)
+            pdf.cell(0, 6, LIBRARY_ADDRESS, border=0, ln=1, align='C')
+            pdf.cell(0, 6, f"Phone: {LIBRARY_PHONE} | Email: {LIBRARY_EMAIL}", border=0, ln=1, align='C')
+            pdf.ln(5)
+
+            # Title
+            pdf.set_font('Arial', 'B', 14)
+            pdf.cell(0, 10, 'Comprehensive Student Receipt', border=0, ln=1, align='C')
+            pdf.ln(10)
+
+            # Student Details
+            pdf.set_font('Arial', 'B', 12)
+            pdf.cell(0, 8, 'Student Details:', border=0, ln=1, align='L')
+            pdf.set_font('Arial', '', 12)
+            pdf.cell(0, 6, f"Name: {student_data.get('name', 'N/A')}", border=0, ln=1, align='L')
+            pdf.cell(0, 6, f"Father's Name: {student_data.get('father_name', 'N/A')}", border=0, ln=1, align='L')
+            pdf.cell(0, 6, f"Mobile: {student_data.get('phone', 'N/A')}", border=0, ln=1, align='L')
+            reg_date = student_data.get('registration_date', 'N/A')
+            if hasattr(reg_date, 'strftime'):
+                reg_date = reg_date.strftime('%d/%m/%Y')
+            pdf.cell(0, 6, f"Registration Date: {reg_date}", border=0, ln=1, align='L')
+            pdf.ln(8)
+
+            # Subscriptions Table Header
+            pdf.set_font('Arial', 'B', 10)
+            pdf.cell(15, 10, 'Sub ID', border=1, ln=0, align='C')
+            pdf.cell(25, 10, 'Start Date', border=1, ln=0, align='C')
+            pdf.cell(25, 10, 'End Date', border=1, ln=0, align='C')
+            pdf.cell(20, 10, 'Amount', border=1, ln=0, align='C')
+            pdf.cell(25, 10, 'Duration', border=1, ln=0, align='C')
+            pdf.cell(25, 10, 'Seat No', border=1, ln=0, align='C')
+            pdf.cell(40, 10, 'Plan', border=1, ln=0, align='C')
+            pdf.cell(40, 10, 'Timeslot', border=1, ln=0, align='C')
+            pdf.cell(20, 10, 'Status', border=1, ln=1, align='C')
+
+            # Subscriptions Table Rows
+            pdf.set_font('Arial', '', 9)
+            for sub in subscriptions_data:
+                start_date = sub.get('start_date', 'N/A')
+                if isinstance(start_date, datetime):
+                    start_date = start_date.strftime('%d/%m/%Y')
+                end_date = sub.get('end_date', 'N/A')
+                if isinstance(end_date, datetime):
+                    end_date = end_date.strftime('%d/%m/%Y')
+                
+                # Use duration_months from subscription data
+                duration_months = sub.get('duration_months', 'N/A')
+                if duration_months == 'N/A' or duration_months is None:
+                    # Fallback to calculating from dates if duration_months is not available
+                    try:
+                        # Parse dates if they are strings, otherwise use as-is
+                        if isinstance(start_date, str) and start_date != 'N/A':
+                            start_dt = datetime.strptime(start_date, '%d/%m/%Y')
+                        elif hasattr(start_date, 'strftime'):
+                            # Already a datetime object
+                            start_dt = start_date
+                        else:
+                            # Fallback to today if we can't parse
+                            start_dt = datetime.now()
+                            
+                        if isinstance(end_date, str) and end_date != 'N/A':
+                            end_dt = datetime.strptime(end_date, '%d/%m/%Y')
+                        elif hasattr(end_date, 'strftime'):
+                            # Already a datetime object
+                            end_dt = end_date
+                        else:
+                            # Fallback to today if we can't parse
+                            end_dt = datetime.now()
+                            
+                        duration_days = (end_dt - start_dt).days + 1
+                        duration_months = round(duration_days / 30.0, 1)
+                    except Exception as e:
+                        print(f"Duration calculation error: {e}")
+                        duration_months = 'N/A'
+                
+                pdf.cell(15, 10, str(sub.get('id', 'N/A')), border=1, ln=0, align='C')
+                pdf.cell(25, 10, str(start_date), border=1, ln=0, align='C')
+                pdf.cell(25, 10, str(end_date), border=1, ln=0, align='C')
+                pdf.cell(20, 10, f"{DEFAULT_CURRENCY} {sub.get('amount_paid', 'N/A')}", border=1, ln=0, align='C')
+                pdf.cell(25, 10, f"{duration_months} months", border=1, ln=0, align='C')
+                pdf.cell(25, 10, str(sub.get('seat_number', 'N/A')), border=1, ln=0, align='C')
+                pdf.cell(40, 10, str(sub.get('plan_name', 'N/A')), border=1, ln=0, align='C')
+                pdf.cell(40, 10, str(sub.get('timeslot', 'N/A')), border=1, ln=0, align='C')
+                pdf.cell(20, 10, str(sub.get('status', 'N/A')), border=1, ln=1, align='C')
+
+            pdf.ln(10)
+
+            # Terms and conditions
+            pdf.set_font('Arial', 'B', 10)
+            pdf.cell(0, 6, 'Terms and Conditions:', border=0, ln=1, align='L')
+            pdf.set_font('Arial', '', 10)
+            terms = [
+                "1. This receipt is valid for the subscription period mentioned above.",
+                "2. No refund will be provided for early termination.",
+                "3. Library rules and regulations apply.",
+                "4. Lost receipt should be reported immediately.",
+                "5. Seat transfer is not allowed without prior approval."
+            ]
+            for term in terms:
+                pdf.multi_cell(0, 5, term, border=0, align='L', ln=1)
+
+            # Add QR codes at the bottom
+            qr_y = pdf.get_y()
+            if qr_y > 220: # Check if there is enough space for QR codes
+                pdf.add_page()
+                qr_y = pdf.get_y()
+
+            pdf.set_font('Arial', 'B', 10)
+            pdf.cell(0, 6, 'Quick Access:', border=0, ln=1, align='L')
+            pdf.ln(2)
+
+            # Website QR code
+            qr_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'sangharsh_library_qr.png')
+            if os.path.exists(qr_path):
+                try:
+                    pdf.image(qr_path, x=30, y=pdf.get_y(), w=25, h=25)
+                    pdf.set_xy(20, pdf.get_y() + 26)
+                    pdf.set_font('Arial', '', 8)
+                    pdf.cell(45, 3, 'Visit our website', border=0, ln=0, align='C')
+
+                    # Library rules QR code
+                    library_rules_url = "https://www.notion.so/Sangharsh-Library-rules-235ed2a2852c80fa980cf28ceeb9f5f1"
+                    rules_qr_path = self.generate_qr_code(library_rules_url)
+                    if rules_qr_path:
+                        pdf.image(rules_qr_path, x=140, y=qr_y + 8, w=25, h=25)
+                        pdf.set_xy(130, qr_y + 34)
+                        pdf.set_font('Arial', '', 8)
+                        pdf.cell(45, 3, 'Library rules & policies', border=0, ln=0, align='C')
+                        try:
+                            os.remove(rules_qr_path)
+                        except: pass
+                except Exception as e:
+                    print(f"Error adding QR codes: {e}")
+
+            # Move cursor below QR codes
+            pdf.set_y(qr_y + 45)
+
+            # Generate filename with student ID and name
+            student_id = student_data.get('id', 'student')
+            student_name = student_data.get('name', 'student').replace(' ', '_')
+            filename = f"{student_id}_{student_name}_comprehensive_receipt.pdf"
+            filepath = os.path.join(RECEIPTS_DIR, filename)
+
+            # Ensure directory exists
+            self.ensure_receipts_directory()
+            pdf.output(filepath, 'F')
+            return True, filepath
+        except Exception as e:
+            # Using a logger is better, but for now, print to console
+            print(f"Error generating comprehensive receipt: {e}")
+            return False, str(e)
 
 
 # Alias for backward compatibility

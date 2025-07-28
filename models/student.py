@@ -107,16 +107,28 @@ class Student:
     
     @classmethod
     def search(cls, search_term):
-        """Search students by name, mobile, or aadhaar"""
+        """Search students by ID, name, mobile, or aadhaar"""
         db_manager = DatabaseManager()
         query = '''
             SELECT * FROM students 
-            WHERE (name LIKE ? OR mobile_number LIKE ? OR aadhaar_number LIKE ?)
+            WHERE (id = ? OR name LIKE ? OR mobile_number LIKE ? OR aadhaar_number LIKE ?)
             AND is_active = 1
             ORDER BY name
         '''
         search_pattern = f"%{search_term}%"
-        results = db_manager.execute_query(query, (search_pattern, search_pattern, search_pattern))
+        # Try to convert search term to integer for ID search
+        try:
+            student_id = int(search_term)
+            results = db_manager.execute_query(query, (student_id, search_pattern, search_pattern, search_pattern))
+        except ValueError:
+            # If not a number, search only by name, mobile, or aadhaar
+            query = '''
+                SELECT * FROM students 
+                WHERE (name LIKE ? OR mobile_number LIKE ? OR aadhaar_number LIKE ?)
+                AND is_active = 1
+                ORDER BY name
+            '''
+            results = db_manager.execute_query(query, (search_pattern, search_pattern, search_pattern))
         return [cls._from_row(row) for row in results]
     
     @classmethod

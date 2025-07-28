@@ -271,13 +271,22 @@ Note: Keep this window open while using WhatsApp automation.
         tree_frame.rowconfigure(0, weight=1)
         tree_frame.columnconfigure(0, weight=1)
         
-        # Expiring subscriptions tree
-        columns = ('Student', 'Mobile', 'Seat', 'Timeslot', 'Expiry Date', 'Days Left')
+        # Expiring subscriptions tree with selection
+        columns = ('Select', 'Student', 'Mobile', 'Seat', 'Timeslot', 'Expiry Date', 'Days Left')
         self.reminder_tree = ttk.Treeview(tree_frame, columns=columns, show='headings', height=8)
+        
+        # Store selection state for each item
+        self.reminder_selections = {}
         
         for col in columns:
             self.reminder_tree.heading(col, text=col)
-            self.reminder_tree.column(col, width=120, minwidth=80)
+            if col == 'Select':
+                self.reminder_tree.column(col, width=60, minwidth=60)
+            else:
+                self.reminder_tree.column(col, width=120, minwidth=80)
+        
+        # Bind click event for checkbox functionality
+        self.reminder_tree.bind('<Button-1>', self.on_reminder_tree_click)
         
         scrollbar = ttk.Scrollbar(tree_frame, orient='vertical', command=self.reminder_tree.yview)
         self.reminder_tree.configure(yscrollcommand=scrollbar.set)
@@ -295,10 +304,20 @@ Note: Keep this window open while using WhatsApp automation.
         load_btn.grid(row=0, column=0, sticky='ew', padx=5, pady=5)
         self.create_tooltip(load_btn, "Load subscriptions that will expire soon")
         
+        select_all_btn = ttk.Button(button_frame, text="Select All", 
+                                   command=self.select_all_reminders)
+        select_all_btn.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
+        self.create_tooltip(select_all_btn, "Select all students for reminders")
+        
+        deselect_all_btn = ttk.Button(button_frame, text="Deselect All", 
+                                     command=self.deselect_all_reminders)
+        deselect_all_btn.grid(row=0, column=2, sticky='ew', padx=5, pady=5)
+        self.create_tooltip(deselect_all_btn, "Deselect all students")
+        
         send_btn = ttk.Button(button_frame, text="Send Reminders", 
                              command=self.send_subscription_reminders)
-        send_btn.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
-        self.create_tooltip(send_btn, "Send reminder messages to students with expiring subscriptions")
+        send_btn.grid(row=0, column=3, sticky='ew', padx=5, pady=5)
+        self.create_tooltip(send_btn, "Send reminder messages to selected students only")
     
     def create_cancellations_tab(self, parent):
         """Create subscription cancellations tab"""
@@ -932,15 +951,18 @@ The message includes readmission contact information and encourages them to retu
                 def update_ui():
                     try:
                         # Clear existing items
+                        # Clear existing items and selections
                         for item in self.reminder_tree.get_children():
                             self.reminder_tree.delete(item)
+                        self.reminder_selections.clear()
                         
                         for sub in expiring_subs:
                             from datetime import datetime, date
                             end_date = datetime.strptime(sub['end_date'], '%Y-%m-%d').date()
                             days_left = (end_date - date.today()).days
                             
-                            self.reminder_tree.insert('', 'end', values=(
+                            item_id = self.reminder_tree.insert('', 'end', values=(
+                                '☐',  # Unchecked checkbox
                                 sub['student_name'],
                                 sub['mobile_number'],
                                 f"Seat {sub['seat_number']}",
@@ -948,6 +970,8 @@ The message includes readmission contact information and encourages them to retu
                                 sub['end_date'],
                                 days_left
                             ))
+                            # Store subscription data for this item
+                            self.reminder_selections[item_id] = {'selected': False, 'data': sub}
                         
                         self.log_message(f"Loaded {len(expiring_subs)} expiring subscriptions")
                         
@@ -1002,17 +1026,20 @@ The message includes readmission contact information and encourages them to retu
         
         def send_thread():
             try:
-                days = int(self.reminder_days_var.get())
-                expiring_subs = Subscription.get_expiring_soon(days)
+                # Get only selected students
+                selected_subs = []
+                for item_id, data in self.reminder_selections.items():
+                    if data['selected']:
+                        selected_subs.append(data['data'])
                 
-                if not expiring_subs:
-                    self.log_message("No expiring subscriptions found")
+                if not selected_subs:
+                    self.log_message("No students selected for reminders")
                     return
                 
-                self.log_message(f"Sending consolidated reminders to students...")
+                self.log_message(f"Sending consolidated reminders to {len(selected_subs)} selected students...")
                 
-                # Use consolidated reminders instead of individual messages
-                results = self.whatsapp.send_consolidated_reminders(expiring_subs)
+                # Use consolidated reminders for selected students only
+                results = self.whatsapp.send_consolidated_reminders(selected_subs)
                 
                 successful = len([r for r in results if r['success']])
                 failed = len(results) - successful
@@ -1027,8 +1054,14 @@ The message includes readmission contact information and encourages them to retu
             except Exception as e:
                 self.log_message(f"Error sending reminders: {str(e)}")
         
+        # Check if any students are selected
+        selected_count = sum(1 for data in self.reminder_selections.values() if data['selected'])
+        if selected_count == 0:
+            messagebox.showwarning("Warning", "Please select at least one student to send reminders to.")
+            return
+        
         # Confirm before sending
-        if messagebox.askyesno("Confirm", "Send subscription reminders to all expiring students?"):
+        if messagebox.askyesno("Confirm", f"Send subscription reminders to {selected_count} selected students?"):
             threading.Thread(target=send_thread, daemon=True).start()
     
     def load_expired_subscriptions(self):
@@ -1383,6 +1416,57 @@ The message includes readmission contact information and encourages them to retu
                 self.window.destroy()
             except:
                 pass
+    
+    def on_reminder_tree_click(self, event):
+        """Handle clicks on the reminder tree for checkbox functionality"""
+        try:
+            item = self.reminder_tree.identify('item', event.x, event.y)
+            column = self.reminder_tree.identify('column', event.x, event.y)
+            
+            # Check if click was on the Select column
+            if item and column == '#1':  # First column is Select
+                if item in self.reminder_selections:
+                    # Toggle selection
+                    current_state = self.reminder_selections[item]['selected']
+                    self.reminder_selections[item]['selected'] = not current_state
+                    
+                    # Update checkbox display
+                    values = list(self.reminder_tree.item(item, 'values'))
+                    values[0] = '☑' if not current_state else '☐'
+                    self.reminder_tree.item(item, values=values)
+                    
+        except Exception as e:
+            self.log_message(f"Error handling tree click: {e}")
+    
+    def select_all_reminders(self):
+        """Select all students in the reminders list"""
+        try:
+            for item_id in self.reminder_selections:
+                self.reminder_selections[item_id]['selected'] = True
+                values = list(self.reminder_tree.item(item_id, 'values'))
+                values[0] = '☑'
+                self.reminder_tree.item(item_id, values=values)
+            
+            count = len(self.reminder_selections)
+            self.log_message(f"Selected all {count} students for reminders")
+            
+        except Exception as e:
+            self.log_message(f"Error selecting all: {e}")
+    
+    def deselect_all_reminders(self):
+        """Deselect all students in the reminders list"""
+        try:
+            for item_id in self.reminder_selections:
+                self.reminder_selections[item_id]['selected'] = False
+                values = list(self.reminder_tree.item(item_id, 'values'))
+                values[0] = '☐'
+                self.reminder_tree.item(item_id, values=values)
+            
+            count = len(self.reminder_selections)
+            self.log_message(f"Deselected all {count} students")
+            
+        except Exception as e:
+            self.log_message(f"Error deselecting all: {e}")
     
     def __del__(self):
         """Cleanup when window is closed"""

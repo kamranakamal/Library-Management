@@ -914,17 +914,30 @@ class WhatsAppAutomation:
     def sanitize_message_for_chrome(self, message):
         """Sanitize message to be compatible with ChromeDriver while preserving important emojis"""
         try:
-            # Define replacements for common emojis that are outside BMP
-            # These emojis are commonly used in the library messages
+            # Define replacements for common emojis with descriptive field names
+            # Replace emoji placeholders with actual field names as requested
             emoji_replacements = {
-                '📍': '[Location]',
-                '📞': '[Phone]', 
-                '📧': '[Email]',
-                '📱': '[Mobile]',
-                '💬': '[Message]',
-                '🔍': '[Search]',
-                '🧪': '[Test]',
-                # Keep these as they're in BMP range
+                '📍': 'LOCATION',
+                '📞': 'PHONE', 
+                '📧': 'EMAIL',
+                '📱': 'MOBILE',
+                '💬': 'MESSAGE',
+                '🔍': 'SEARCH',
+                '🧪': 'TEST',
+                '🔔': 'NOTIFICATION',
+                '🎉': 'CELEBRATION',
+                '📋': 'DETAILS',
+                '📚': 'BOOKS',
+                '🏢': 'BUILDING',
+                '🙏': 'THANKS',
+                '👋': 'GREETING',
+                '✨': 'SPARKLE',
+                '📅': 'CALENDAR',
+                '🔄': 'RENEWAL',
+                '⏰': 'TIME',
+                '💰': 'MONEY',
+                '📖': 'BOOK',
+                # Keep these as they're in BMP range and work well
                 # '✅': '✅',  # U+2705 (BMP)
                 # '❌': '❌',  # U+274C (BMP)
             }
@@ -1122,13 +1135,21 @@ class WhatsAppAutomation:
                             except Exception as char_error:
                                 # If this specific character fails, try a safe alternative
                                 if ord(char) > 127:
-                                    # For Unicode characters that fail, try common alternatives
+                                    # For Unicode characters that fail, try field name alternatives
                                     if char == '📍':
-                                        message_box.send_keys('[Location]')
+                                        message_box.send_keys('LOCATION')
                                     elif char == '📧':
-                                        message_box.send_keys('[Email]')
+                                        message_box.send_keys('EMAIL')
                                     elif char == '📞':
-                                        message_box.send_keys('[Phone]')
+                                        message_box.send_keys('PHONE')
+                                    elif char == '📱':
+                                        message_box.send_keys('MOBILE')
+                                    elif char == '🔔':
+                                        message_box.send_keys('NOTIFICATION')
+                                    elif char == '📋':
+                                        message_box.send_keys('DETAILS')
+                                    elif char == '🎉':
+                                        message_box.send_keys('CELEBRATION')
                                     else:
                                         # Skip other problematic characters
                                         continue

@@ -1040,7 +1040,7 @@ This will send ALL subscription history and current status."""
                     ss.id, ss.receipt_number, ss.start_date, ss.end_date, 
                     ss.amount_paid, ss.created_at,
                     seat.id as seat_number,
-                    t.name as timeslot_name, t.start_time, t.end_time,
+                    t.name as timeslot_name, t.start_time, t.end_time, t.duration_months,
                     CASE 
                         WHEN DATE(ss.end_date) >= DATE('now') THEN 'Active' 
                         ELSE 'Expired' 
@@ -1054,6 +1054,9 @@ This will send ALL subscription history and current status."""
             
             subscriptions_data = []
             for row in db_manager.execute_query(query, (self.current_student_id,)):
+                # Format timeslot as "timeslot_name (start_time - end_time)"
+                timeslot_formatted = f"{row[7]} ({row[8]} - {row[9]})"
+                
                 subscriptions_data.append({
                     'id': row[0],
                     'receipt_number': row[1],
@@ -1065,7 +1068,10 @@ This will send ALL subscription history and current status."""
                     'timeslot_name': row[7],
                     'start_time': row[8],
                     'end_time': row[9],
-                    'status': row[10]
+                    'duration_months': row[10],  # Duration in months from timeslot
+                    'plan_name': 'Standard Plan',  # Default plan name since no plans table exists
+                    'timeslot': timeslot_formatted,  # Formatted timeslot for PDF
+                    'status': row[11]  # Status is now at index 11 due to added duration_months
                 })
             
             if not subscriptions_data:
@@ -1074,8 +1080,10 @@ This will send ALL subscription history and current status."""
             
             # Prepare student data
             student_data = {
+                'id': student.id,
                 'name': student.name,
                 'father_name': student.father_name,
+                'phone': student.mobile_number,  # Fixed field name for PDF generator
                 'mobile_number': student.mobile_number,
                 'email': student.email or '',
                 'aadhaar_number': student.aadhaar_number or '',
