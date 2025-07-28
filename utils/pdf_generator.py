@@ -258,15 +258,14 @@ class PDFGenerator:
 
             # Subscriptions Table Header
             pdf.set_font('Arial', 'B', 10)
-            pdf.cell(15, 10, 'Sub ID', border=1, ln=0, align='C')
+            pdf.cell(15, 10, 'Stu ID', border=1, ln=0, align='C')
             pdf.cell(25, 10, 'Start Date', border=1, ln=0, align='C')
             pdf.cell(25, 10, 'End Date', border=1, ln=0, align='C')
             pdf.cell(20, 10, 'Amount', border=1, ln=0, align='C')
             pdf.cell(25, 10, 'Duration', border=1, ln=0, align='C')
             pdf.cell(25, 10, 'Seat No', border=1, ln=0, align='C')
-            pdf.cell(40, 10, 'Plan', border=1, ln=0, align='C')
-            pdf.cell(40, 10, 'Timeslot', border=1, ln=0, align='C')
-            pdf.cell(20, 10, 'Status', border=1, ln=1, align='C')
+            pdf.cell(45, 10, 'Timeslot', border=1, ln=0, align='C')
+            pdf.cell(30, 10, 'Status', border=1, ln=1, align='C')
 
             # Subscriptions Table Rows
             pdf.set_font('Arial', '', 9)
@@ -308,15 +307,16 @@ class PDFGenerator:
                         print(f"Duration calculation error: {e}")
                         duration_months = 'N/A'
                 
-                pdf.cell(15, 10, str(sub.get('id', 'N/A')), border=1, ln=0, align='C')
+                # Use student ID instead of subscription ID
+                student_id = student_data.get('id', 'N/A')
+                pdf.cell(15, 10, str(student_id), border=1, ln=0, align='C')
                 pdf.cell(25, 10, str(start_date), border=1, ln=0, align='C')
                 pdf.cell(25, 10, str(end_date), border=1, ln=0, align='C')
                 pdf.cell(20, 10, f"{DEFAULT_CURRENCY} {sub.get('amount_paid', 'N/A')}", border=1, ln=0, align='C')
                 pdf.cell(25, 10, f"{duration_months} months", border=1, ln=0, align='C')
                 pdf.cell(25, 10, str(sub.get('seat_number', 'N/A')), border=1, ln=0, align='C')
-                pdf.cell(40, 10, str(sub.get('plan_name', 'N/A')), border=1, ln=0, align='C')
-                pdf.cell(40, 10, str(sub.get('timeslot', 'N/A')), border=1, ln=0, align='C')
-                pdf.cell(20, 10, str(sub.get('status', 'N/A')), border=1, ln=1, align='C')
+                pdf.cell(45, 10, str(sub.get('timeslot', 'N/A')), border=1, ln=0, align='C')
+                pdf.cell(30, 10, str(sub.get('status', 'N/A')), border=1, ln=1, align='C')
 
             pdf.ln(10)
 
