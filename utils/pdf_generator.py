@@ -320,6 +320,33 @@ class PDFGenerator:
 
             pdf.ln(10)
 
+            # Summary Section
+            pdf.set_font('Arial', 'B', 12)
+            pdf.cell(0, 8, 'Subscription Summary:', border=0, ln=1, align='L')
+            pdf.ln(2)
+            
+            # Calculate summary data
+            total_subscriptions = len(subscriptions_data)
+            active_subscriptions = len([sub for sub in subscriptions_data if sub.get('status', '').lower() == 'active'])
+            expired_subscriptions = len([sub for sub in subscriptions_data if sub.get('status', '').lower() == 'expired'])
+            
+            # Calculate total amount paid
+            total_amount_paid = 0
+            for sub in subscriptions_data:
+                amount = sub.get('amount_paid', 0)
+                if isinstance(amount, (int, float)):
+                    total_amount_paid += amount
+                elif isinstance(amount, str) and amount.replace('.', '', 1).isdigit():
+                    total_amount_paid += float(amount)
+            
+            # Display summary data
+            pdf.set_font('Arial', '', 11)
+            pdf.cell(0, 6, f"Total Subscriptions: {total_subscriptions}", border=0, ln=1, align='L')
+            pdf.cell(0, 6, f"Active Subscriptions: {active_subscriptions}", border=0, ln=1, align='L')
+            pdf.cell(0, 6, f"Expired Subscriptions: {expired_subscriptions}", border=0, ln=1, align='L')
+            pdf.cell(0, 6, f"Total Amount Paid: {DEFAULT_CURRENCY} {total_amount_paid:.2f}", border=0, ln=1, align='L')
+            pdf.ln(8)
+
             # Terms and conditions
             pdf.set_font('Arial', 'B', 10)
             pdf.cell(0, 6, 'Terms and Conditions:', border=0, ln=1, align='L')
