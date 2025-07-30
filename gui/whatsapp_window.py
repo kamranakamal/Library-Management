@@ -382,13 +382,22 @@ The message includes readmission contact information and encourages them to retu
         tree_frame.rowconfigure(0, weight=1)
         tree_frame.columnconfigure(0, weight=1)
         
-        # Expired subscriptions tree
-        columns = ('Student', 'Mobile', 'Seat', 'Timeslot', 'Expired Date', 'Days Expired')
+        # Expired subscriptions tree with selection
+        columns = ('Select', 'Student', 'Mobile', 'Seat', 'Timeslot', 'Expired Date', 'Days Expired')
         self.cancellation_tree = ttk.Treeview(tree_frame, columns=columns, show='headings', height=8)
+        
+        # Store selection state for each item
+        self.cancellation_selections = {}
         
         for col in columns:
             self.cancellation_tree.heading(col, text=col)
-            self.cancellation_tree.column(col, width=120, minwidth=80)
+            if col == 'Select':
+                self.cancellation_tree.column(col, width=60, minwidth=60)
+            else:
+                self.cancellation_tree.column(col, width=120, minwidth=80)
+        
+        # Bind click event for checkbox functionality
+        self.cancellation_tree.bind('<Button-1>', self.on_cancellation_tree_click)
         
         scrollbar2 = ttk.Scrollbar(tree_frame, orient='vertical', command=self.cancellation_tree.yview)
         self.cancellation_tree.configure(yscrollcommand=scrollbar2.set)
@@ -399,17 +408,32 @@ The message includes readmission contact information and encourages them to retu
         # Buttons
         button_frame = ttk.Frame(cancellations_frame)
         button_frame.grid(row=4, column=0, sticky='ew', pady=10, padx=10)
-        button_frame.columnconfigure((0, 1), weight=1)
+        button_frame.columnconfigure((0, 1, 2, 3), weight=1)
         
         load_btn = ttk.Button(button_frame, text="Load Expired Subscriptions", 
                              command=self.load_expired_subscriptions)
         load_btn.grid(row=0, column=0, sticky='ew', padx=5, pady=5)
         self.create_tooltip(load_btn, "Load subscriptions that have recently expired")
         
+        load_all_btn = ttk.Button(button_frame, text="Load All Expired Students", 
+                                 command=self.load_all_expired_students)
+        load_all_btn.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
+        self.create_tooltip(load_all_btn, "Load all expired students regardless of expiry date")
+        
+        select_all_btn = ttk.Button(button_frame, text="Select All", 
+                                   command=self.select_all_cancellations)
+        select_all_btn.grid(row=0, column=2, sticky='ew', padx=5, pady=5)
+        self.create_tooltip(select_all_btn, "Select all students for cancellation messages")
+        
+        deselect_all_btn = ttk.Button(button_frame, text="Deselect All", 
+                                     command=self.deselect_all_cancellations)
+        deselect_all_btn.grid(row=0, column=3, sticky='ew', padx=5, pady=5)
+        self.create_tooltip(deselect_all_btn, "Deselect all students")
+        
         send_btn = ttk.Button(button_frame, text="Send Cancellation Messages", 
                              command=self.send_cancellation_messages)
-        send_btn.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
-        self.create_tooltip(send_btn, "Send cancellation notices to students with expired subscriptions")
+        send_btn.grid(row=1, column=0, columnspan=4, sticky='ew', padx=5, pady=5)
+        self.create_tooltip(send_btn, "Send cancellation notices to selected students only")
     
     def create_custom_messages_tab(self, parent):
         """Create custom messages tab"""
@@ -1077,9 +1101,10 @@ The message includes readmission contact information and encourages them to retu
                 # Update UI in main thread
                 def update_ui():
                     try:
-                        # Clear existing items
+                        # Clear existing items and selections
                         for item in self.cancellation_tree.get_children():
                             self.cancellation_tree.delete(item)
+                        self.cancellation_selections.clear()
                         
                         # Add expired subscriptions to tree
                         for sub in expired_subs:
@@ -1089,7 +1114,8 @@ The message includes readmission contact information and encourages them to retu
                             end_date = datetime.strptime(sub['end_date'], '%Y-%m-%d').date()
                             days_expired = (date.today() - end_date).days
                             
-                            self.cancellation_tree.insert('', 'end', values=(
+                            item_id = self.cancellation_tree.insert('', 'end', values=(
+                                '☐',  # Unchecked checkbox
                                 sub['student_name'],
                                 sub['mobile_number'],
                                 sub['seat_number'],
@@ -1097,6 +1123,8 @@ The message includes readmission contact information and encourages them to retu
                                 sub['end_date'],
                                 f"{days_expired} days"
                             ))
+                            # Store subscription data for this item
+                            self.cancellation_selections[item_id] = {'selected': False, 'data': sub}
                         
                         self.log_message(f"Loaded {len(expired_subs)} expired subscriptions for cancellation")
                         
@@ -1117,28 +1145,22 @@ The message includes readmission contact information and encourages them to retu
         threading.Thread(target=load_thread, daemon=True).start()
     
     def send_cancellation_messages(self):
-        """Send cancellation messages to expired students"""
-        # Get expired subscriptions from tree
-        expired_subs = []
-        for item in self.cancellation_tree.get_children():
-            values = self.cancellation_tree.item(item)['values']
-            expired_subs.append({
-                'student_name': values[0],
-                'mobile_number': values[1],
-                'seat_number': values[2],
-                'timeslot_name': values[3],
-                'end_date': values[4]
-            })
+        """Send cancellation messages to selected expired students"""
+        # Get only selected expired subscriptions
+        selected_subs = []
+        for item_id, data in self.cancellation_selections.items():
+            if data['selected']:
+                selected_subs.append(data['data'])
         
-        if not expired_subs:
-            messagebox.showwarning("Warning", "No expired subscriptions loaded. Please load expired subscriptions first.")
+        if not selected_subs:
+            messagebox.showwarning("Warning", "No students selected for cancellation messages. Please select at least one student or load expired subscriptions first.")
             return
         
         def send_thread():
             try:
-                self.log_message(f"Sending cancellation messages to {len(expired_subs)} students...")
+                self.log_message(f"Sending cancellation messages to {len(selected_subs)} selected students...")
                 
-                results = self.whatsapp.send_subscription_cancellations(expired_subs)
+                results = self.whatsapp.send_subscription_cancellations(selected_subs)
                 
                 successful = len([r for r in results if r['success']])
                 failed = len(results) - successful
@@ -1155,7 +1177,7 @@ The message includes readmission contact information and encourages them to retu
         
         # Confirm before sending with warning
         warning_message = (
-            f"⚠️ WARNING: This will send CANCELLATION messages to {len(expired_subs)} students.\n\n"
+            f"⚠️ WARNING: This will send CANCELLATION messages to {len(selected_subs)} selected students.\n\n"
             "These messages inform students that their subscriptions have been cancelled "
             "due to expiration and provide readmission contact information.\n\n"
             "Are you sure you want to proceed?"
@@ -1467,6 +1489,111 @@ The message includes readmission contact information and encourages them to retu
             
         except Exception as e:
             self.log_message(f"Error deselecting all: {e}")
+    
+    def on_cancellation_tree_click(self, event):
+        """Handle clicks on the cancellation tree for checkbox functionality"""
+        try:
+            item = self.cancellation_tree.identify('item', event.x, event.y)
+            column = self.cancellation_tree.identify('column', event.x, event.y)
+            
+            # Check if click was on the Select column
+            if item and column == '#1':  # First column is Select
+                if item in self.cancellation_selections:
+                    # Toggle selection
+                    current_state = self.cancellation_selections[item]['selected']
+                    self.cancellation_selections[item]['selected'] = not current_state
+                    
+                    # Update checkbox display
+                    values = list(self.cancellation_tree.item(item, 'values'))
+                    values[0] = '☑' if not current_state else '☐'
+                    self.cancellation_tree.item(item, values=values)
+                    
+        except Exception as e:
+            self.log_message(f"Error handling cancellation tree click: {e}")
+    
+    def select_all_cancellations(self):
+        """Select all students in the cancellations list"""
+        try:
+            for item_id in self.cancellation_selections:
+                self.cancellation_selections[item_id]['selected'] = True
+                values = list(self.cancellation_tree.item(item_id, 'values'))
+                values[0] = '☑'
+                self.cancellation_tree.item(item_id, values=values)
+            
+            count = len(self.cancellation_selections)
+            self.log_message(f"Selected all {count} students for cancellation messages")
+            
+        except Exception as e:
+            self.log_message(f"Error selecting all: {e}")
+    
+    def deselect_all_cancellations(self):
+        """Deselect all students in the cancellations list"""
+        try:
+            for item_id in self.cancellation_selections:
+                self.cancellation_selections[item_id]['selected'] = False
+                values = list(self.cancellation_tree.item(item_id, 'values'))
+                values[0] = '☐'
+                self.cancellation_tree.item(item_id, values=values)
+            
+            count = len(self.cancellation_selections)
+            self.log_message(f"Deselected all {count} students")
+            
+        except Exception as e:
+            self.log_message(f"Error deselecting all: {e}")
+    
+    def load_all_expired_students(self):
+        """Load all expired students regardless of expiry date"""
+        def load_thread():
+            try:
+                # Get all expired subscriptions
+                from models.subscription import Subscription
+                expired_subs = Subscription.get_all_expired_subscriptions()
+                
+                # Update UI in main thread
+                def update_ui():
+                    try:
+                        # Clear existing items and selections
+                        for item in self.cancellation_tree.get_children():
+                            self.cancellation_tree.delete(item)
+                        self.cancellation_selections.clear()
+                        
+                        # Add expired subscriptions to tree
+                        for sub in expired_subs:
+                            from datetime import date, datetime
+                            
+                            # Calculate days expired
+                            end_date = datetime.strptime(sub['end_date'], '%Y-%m-%d').date()
+                            days_expired = (date.today() - end_date).days
+                            
+                            item_id = self.cancellation_tree.insert('', 'end', values=(
+                                '☐',  # Unchecked checkbox
+                                sub['student_name'],
+                                sub['mobile_number'],
+                                sub['seat_number'],
+                                sub['timeslot_name'],
+                                sub['end_date'],
+                                f"{days_expired} days"
+                            ))
+                            # Store subscription data for this item
+                            self.cancellation_selections[item_id] = {'selected': False, 'data': sub}
+                        
+                        self.log_message(f"Loaded {len(expired_subs)} expired students")
+                        
+                    except Exception as e:
+                        self.log_message(f"Error updating UI: {str(e)}")
+                        messagebox.showerror("Error", f"Failed to load expired students: {str(e)}")
+                
+                # Schedule UI update on main thread
+                if hasattr(self, 'window') and self.window.winfo_exists():
+                    self.window.after(0, update_ui)
+                    
+            except Exception as e:
+                # Schedule error message on main thread
+                if hasattr(self, 'window') and self.window.winfo_exists():
+                    self.window.after(0, lambda: messagebox.showerror("Error", f"Failed to load expired students: {str(e)}"))
+        
+        # Run in background thread
+        threading.Thread(target=load_thread, daemon=True).start()
     
     def __del__(self):
         """Cleanup when window is closed"""

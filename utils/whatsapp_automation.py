@@ -1060,12 +1060,15 @@ class WhatsAppAutomation:
                 print(f"⚠️ Error checking number validity: {e}")
             
             # Find message input with optimized approach - try most reliable selectors first
+            # Updated selectors to specifically target chat input box instead of search bar
             message_input_selectors = [
-                '//div[@data-testid="conversation-compose-box-input"]',  # Primary selector (most reliable)
-                '//div[@contenteditable="true"][@data-tab="10"]',  # Alternative
-                '//div[@role="textbox"]',  # Role-based (often works)
-                '//div[@contenteditable="true"][contains(@class, "compose")]',  # Class-based
-                '//div[@contenteditable="true"]',  # Generic contenteditable (last resort)
+                '//div[@data-testid="conversation-compose-box-input" and not(contains(@class, "search"))]',  # Primary selector (most reliable, exclude search)
+                '//div[@data-testid="conversation-compose-box-input"]',  # Fallback primary selector
+                '//div[@contenteditable="true"][@data-tab="10" and not(contains(@class, "search"))]',  # Alternative (exclude search)
+                '//div[@role="textbox" and @data-tab="10"]',  # Role-based with tab (more specific)
+                '//div[@contenteditable="true"][contains(@class, "compose") and not(contains(@class, "search"))]',  # Class-based (exclude search)
+                '//div[@contenteditable="true"][contains(@data-testid, "compose")]',  # Data-testid based
+                '//div[@contenteditable="true"][@data-tab="10"]',  # Contenteditable with tab
             ]
             
             message_box = None
@@ -1105,22 +1108,26 @@ class WhatsAppAutomation:
                 # Click on message box
                 message_box.click()
                 time.sleep(0.5)  # Reduced delay after click (was 1 second)
+                # Add a small additional delay to ensure focus
+                time.sleep(0.2)
                 
                 # Clear any existing text first
                 message_box.clear()
                 
                 # Send message using optimized approach
+                # Ensure message is a single continuous string without line breaks
+                clean_message = ' '.join(message.split())  # Remove all line breaks and extra spaces
                 try:
                     # Direct send_keys (preferred for most text)
-                    message_box.send_keys(message)
-                    print(f"✅ Message typed successfully: {len(message)} characters")
+                    message_box.send_keys(clean_message)
+                    print(f"✅ Message typed successfully: {len(clean_message)} characters")
                 except Exception as send_error:
                     print(f"⚠️ Direct send_keys failed: {send_error}")
                     
                     # Fallback: Try using JavaScript to set the value
                     print("🔄 Trying JavaScript input method...")
                     try:
-                        self.driver.execute_script("arguments[0].innerText = arguments[1];", message_box, message)
+                        self.driver.execute_script("arguments[0].innerText = arguments[1];", message_box, clean_message)
                         print("✅ JavaScript input completed")
                     except Exception as js_error:
                         print(f"⚠️ JavaScript method failed: {js_error}")
@@ -1128,7 +1135,7 @@ class WhatsAppAutomation:
                         # Last resort: character-by-character but keep Unicode
                         print("🔄 Trying careful character-by-character input...")
                         message_box.clear()
-                        for char in message:
+                        for char in clean_message:
                             try:
                                 # Try to send each character, including Unicode
                                 message_box.send_keys(char)
@@ -1214,13 +1221,18 @@ class WhatsAppAutomation:
             return False, f"Error sending message: {str(e)}"
     
     def send_bulk_messages(self, contacts_messages):
-        """Send messages to multiple contacts"""
+        """Send messages to multiple contacts with optimized speed"""
         results = []
+        total_contacts = len(contacts_messages)
         
-        for contact in contacts_messages:
+        print(f"📤 Starting bulk message sending to {total_contacts} contacts...")
+        
+        for index, contact in enumerate(contacts_messages, 1):
             phone_number = contact['phone']
             message = contact['message']
             name = contact.get('name', phone_number)
+            
+            print(f"📱 Sending message {index}/{total_contacts} to {name} ({phone_number})")
             
             success, result_message = self.send_message(phone_number, message)
             
@@ -1231,35 +1243,23 @@ class WhatsAppAutomation:
                 'message': result_message
             })
             
-            # Optimized delay between messages (reduced from WHATSAPP_DELAY * 2)
-            time.sleep(2)  # 2 seconds instead of 6 seconds (3*2)
+            # Reduced delay for faster bulk sending - only 1 second between messages
+            if index < total_contacts:  # Don't wait after the last message
+                time.sleep(1)  # Reduced from 2 seconds to 1 second
         
+        print(f"✅ Bulk message sending completed. {sum(1 for r in results if r['success'])}/{total_contacts} messages sent successfully.")
         return results
     
     def send_subscription_reminders(self, expiring_subscriptions):
-        """Send subscription expiry reminders"""
+        """Send subscription expiry reminders with timeslot duration and optimized speed"""
         messages = []
         
         for subscription in expiring_subscriptions:
-            message = f"""
-Hello {subscription['student_name']}!
-
-This is a reminder from {LIBRARY_NAME} that your library subscription is expiring soon.
-
-Details:
-- Seat Number: {subscription['seat_number']}
-- Timeslot: {subscription['timeslot_name']}
-- Expiry Date: {subscription['end_date']}
-
-Please visit us to renew your subscription.
-
-{LIBRARY_NAME}
-📍 {LIBRARY_ADDRESS}
-📞 {LIBRARY_PHONE}
-📧 {LIBRARY_EMAIL}
-
-Thank you for choosing {LIBRARY_NAME}!
-            """.strip()
+            # Format message as a single paragraph to avoid WhatsApp sending line by line
+            # Include timeslot duration (from-to) instead of just timeslot name
+            timeslot_duration = f"{subscription['timeslot_start']} to {subscription['timeslot_end']}" if 'timeslot_start' in subscription and 'timeslot_end' in subscription and subscription['timeslot_start'] and subscription['timeslot_end'] else subscription['timeslot_name']
+            # Create message as single continuous string without line breaks
+            message = f"Hello {subscription['student_name']}! This is a reminder from {LIBRARY_NAME} that your library subscription is expiring soon. Details: Seat Number: {subscription['seat_number']}, Timeslot: {timeslot_duration}, Expiry Date: {subscription['end_date']}. Please visit us to renew your subscription. {LIBRARY_NAME} LOCATION {LIBRARY_ADDRESS} PHONE {LIBRARY_PHONE} EMAIL {LIBRARY_EMAIL} Thank you for choosing {LIBRARY_NAME}!"
             
             messages.append({
                 'name': subscription['student_name'],
@@ -1270,38 +1270,15 @@ Thank you for choosing {LIBRARY_NAME}!
         return self.send_bulk_messages(messages)
     
     def send_subscription_cancellations(self, expired_subscriptions):
-        """Send subscription cancellation messages to expired students"""
+        """Send subscription cancellation messages to expired students with timeslot duration"""
         messages = []
         
         for subscription in expired_subscriptions:
-            message = f"""
-Dear {subscription['student_name']},
-
-We regret to inform you that your library subscription has been cancelled due to expiration.
-
-📋 Expired Subscription Details:
-- Seat Number: {subscription['seat_number']}
-- Timeslot: {subscription['timeslot_name']}
-- Expiry Date: {subscription['end_date']}
-
-🔄 For Readmission:
-If you wish to continue using our library services, please contact us immediately for readmission.
-
-📞 Contact for Readmission:
-WhatsApp: {LIBRARY_PHONE}
-Visit: {LIBRARY_ADDRESS}
-Email: {LIBRARY_EMAIL}
-
-We understand that circumstances can cause delays, and we're here to help you get back on track with your studies.
-
-💬 Quick Readmission:
-Simply reply to this message or call us at {LIBRARY_PHONE} to discuss readmission options and available seats.
-
-Thank you for being part of {LIBRARY_NAME}. We hope to welcome you back soon!
-
-Best regards,
-{LIBRARY_NAME} Team
-            """.strip()
+            # Format message as a single paragraph to avoid WhatsApp sending line by line
+            # Include timeslot duration (from-to) instead of just timeslot name
+            timeslot_duration = f"{subscription['timeslot_start']} to {subscription['timeslot_end']}" if 'timeslot_start' in subscription and 'timeslot_end' in subscription and subscription['timeslot_start'] and subscription['timeslot_end'] else subscription['timeslot_name']
+            # Create message as single continuous string without line breaks
+            message = f"Dear {subscription['student_name']}, We regret to inform you that your library subscription has been cancelled due to expiration. DETAILS Expired Subscription Details: Seat Number: {subscription['seat_number']}, Timeslot: {timeslot_duration}, Expiry Date: {subscription['end_date']}. READMISSION For Readmission: If you wish to continue using our library services, please contact us immediately for readmission. CONTACT Contact for Readmission: WhatsApp: {LIBRARY_PHONE}, Visit: {LIBRARY_ADDRESS}, Email: {LIBRARY_EMAIL}. We understand that circumstances can cause delays, and we're here to help you get back on track with your studies. QUICK Quick Readmission: Simply reply to this message or call us at {LIBRARY_PHONE} to discuss readmission options and available seats. Thank you for being part of {LIBRARY_NAME}. We hope to welcome you back soon! Best regards, {LIBRARY_NAME} Team"
             
             messages.append({
                 'name': subscription['student_name'],
@@ -1312,30 +1289,13 @@ Best regards,
         return self.send_bulk_messages(messages)
     
     def send_overdue_book_reminders(self, overdue_borrowings):
-        """Send overdue book return reminders"""
+        """Send overdue book return reminders with optimized speed"""
         messages = []
         
         for borrowing in overdue_borrowings:
-            message = f"""
-Hello {borrowing['student_name']}!
-
-This is a reminder from {LIBRARY_NAME} that you have an overdue book.
-
-Book Details:
-- Title: {borrowing['book_title']}
-- Author: {borrowing['book_author']}
-- Due Date: {borrowing['due_date']}
-- Fine Amount: Rs. {borrowing['fine_amount']}
-
-Please return the book as soon as possible to avoid additional charges.
-
-{LIBRARY_NAME}
-📍 {LIBRARY_ADDRESS}
-📞 {LIBRARY_PHONE}
-📧 {LIBRARY_EMAIL}
-
-Thank you for choosing {LIBRARY_NAME}!
-            """.strip()
+            # Format message as a single paragraph to avoid WhatsApp sending line by line
+            # Create message as single continuous string without line breaks
+            message = f"Hello {borrowing['student_name']}! This is a reminder that the book \"{borrowing['book_title']}\" borrowed on {borrowing['borrow_date']} is now overdue. BOOK DETAILS Title: {borrowing['book_title']}, Author: {borrowing['author']}, Borrowed On: {borrowing['borrow_date']}, Due Date: {borrowing['due_date']}. Please return the book as soon as possible to avoid late fees. {LIBRARY_NAME} LOCATION {LIBRARY_ADDRESS} PHONE {LIBRARY_PHONE} EMAIL {LIBRARY_EMAIL} Thank you for your cooperation!"
             
             messages.append({
                 'name': borrowing['student_name'],
@@ -1346,31 +1306,12 @@ Thank you for choosing {LIBRARY_NAME}!
         return self.send_bulk_messages(messages)
     
     def send_subscription_confirmation(self, subscription_data):
-        """Send subscription confirmation message"""
-        message = f"""
-🎉 Welcome to {LIBRARY_NAME}! 🎉
-
-Dear {subscription_data['student_name']},
-
-Your subscription has been successfully confirmed!
-
-📋 Subscription Details:
-- Receipt No: {subscription_data['receipt_number']}
-- Seat Number: {subscription_data['seat_id']}
-- Timeslot: {subscription_data['timeslot_name']}
-- Duration: {subscription_data['start_date']} to {subscription_data['end_date']}
-- Amount Paid: Rs. {subscription_data['amount_paid']}
-
-🏢 {LIBRARY_NAME}
-📍 {LIBRARY_ADDRESS}
-📞 {LIBRARY_PHONE}
-📧 {LIBRARY_EMAIL}
-
-Thank you for choosing {LIBRARY_NAME}! We wish you all the best in your studies.
-
-Best regards,
-{LIBRARY_NAME} Team
-        """.strip()
+        """Send subscription confirmation message with timeslot duration"""
+        # Format message as a single paragraph to avoid WhatsApp sending line by line
+        # Include timeslot duration (from-to) instead of just timeslot name
+        timeslot_duration = f"{subscription_data['timeslot_start']} to {subscription_data['timeslot_end']}" if 'timeslot_start' in subscription_data and 'timeslot_end' in subscription_data and subscription_data['timeslot_start'] and subscription_data['timeslot_end'] else subscription_data['timeslot_name']
+        # Create message as single continuous string without line breaks
+        message = f"WELCOME Welcome to {LIBRARY_NAME}! Dear {subscription_data['student_name']}, Your subscription has been successfully confirmed! DETAILS Subscription Details: Receipt No: {subscription_data['receipt_number']}, Seat Number: {subscription_data['seat_id']}, Timeslot: {timeslot_duration}, Duration: {subscription_data['start_date']} to {subscription_data['end_date']}, Amount Paid: Rs. {subscription_data['amount_paid']}. LIBRARY {LIBRARY_NAME} LOCATION {LIBRARY_ADDRESS} PHONE {LIBRARY_PHONE} EMAIL {LIBRARY_EMAIL} Thank you for choosing {LIBRARY_NAME}! We wish you all the best in your studies. Best regards, {LIBRARY_NAME} Team"
         
         return self.send_message(subscription_data['mobile_number'], message)
     
@@ -1508,88 +1449,16 @@ Best regards,
             subscriptions = data['subscriptions']
             
             if len(subscriptions) == 1:
-                # Single subscription
                 sub = subscriptions[0]
-                message = f"""🔔 *Subscription Reminder*
-
-Hello {name}! 👋
-
-Your library subscription is expiring soon:
-
-📋 *Subscription Details:*
-• Seat Number: *{sub['seat_number']}*
-• Timeslot: *{sub['timeslot_name']}*
-• Expiry Date: *{sub['end_date']}* 📅
-
-🔄 Please visit us to renew your subscription.
-
-📍 *{LIBRARY_NAME}*
-📞 {LIBRARY_PHONE}
-📧 {LIBRARY_EMAIL}
-🏢 {LIBRARY_ADDRESS}
-
-Thank you for choosing {LIBRARY_NAME}! 🙏"""
+                timeslot_duration = f"{sub['timeslot_start'] if 'timeslot_start' in sub else ''} to {sub['timeslot_end'] if 'timeslot_end' in sub else ''}" if 'timeslot_start' in sub and 'timeslot_end' in sub else sub['timeslot_name']
+                message = f"REMINDER Subscription Reminder: Hello {name}! Your library subscription is expiring soon. DETAILS Subscription Details: Seat Number: {sub['seat_number']}, Timeslot: {timeslot_duration}, Expiry Date: {sub['end_date']}. RENEWAL Please visit us to renew your subscription. {LIBRARY_NAME} LOCATION {LIBRARY_ADDRESS} PHONE {LIBRARY_PHONE} EMAIL {LIBRARY_EMAIL} Thank you for choosing {LIBRARY_NAME}!"
             else:
-                # Multiple subscriptions
-                subs_list = ""
-                for i, sub in enumerate(subscriptions, 1):
-                    subs_list += f"\n{i}. Seat *{sub['seat_number']}* | {sub['timeslot_name']} | Expires: *{sub['end_date']}*"
-                
-                message = f"""🔔 *Multiple Subscription Reminders*
-
-Hello {name}! 👋
-
-You have {len(subscriptions)} subscriptions expiring soon:
-
-📋 *Subscription Details:*{subs_list}
-
-🔄 Please visit us to renew your subscriptions.
-
-📍 *{LIBRARY_NAME}*
-📞 {LIBRARY_PHONE}
-📧 {LIBRARY_EMAIL}
-🏢 {LIBRARY_ADDRESS}
-
-Thank you for choosing {LIBRARY_NAME}! 🙏"""
+                subs_details = ", ".join([f"Seat {sub['seat_number']} | {sub['timeslot_start'] + ' to ' + sub['timeslot_end'] if 'timeslot_start' in sub and 'timeslot_end' in sub else sub['timeslot_name']} | Expires: {sub['end_date']}" for sub in subscriptions])
+                message = f"REMINDERS Multiple Subscription Reminders: Hello {name}! You have {len(subscriptions)} subscriptions expiring soon. DETAILS Subscription Details: {subs_details}. RENEWAL Please visit us to renew your subscriptions. {LIBRARY_NAME} LOCATION {LIBRARY_ADDRESS} PHONE {LIBRARY_PHONE} EMAIL {LIBRARY_EMAIL} Thank you for choosing {LIBRARY_NAME}!"
             
-            messages.append({
-                'name': name,
-                'phone': phone,
-                'message': message
-            })
+            messages.append({'name': name, 'phone': phone, 'message': message})
         
         return self.send_bulk_messages(messages)
-    
-    def send_registration_confirmation(self, student_data, subscription_data):
-        """Send registration confirmation message"""
-        message = f"""🎉 *Registration Successful!*
-
-Welcome to {LIBRARY_NAME}, {student_data['name']}! 👋
-
-✅ *Registration Details:*
-• Student Name: *{student_data['name']}*
-• Father's Name: {student_data['father_name']}
-• Mobile: {student_data['mobile_number']}
-• Registration Date: *{student_data['registration_date']}*
-
-📋 *Subscription Details:*
-• Receipt No: *{subscription_data['receipt_number']}*
-• Seat Number: *{subscription_data['seat_number']}*
-• Timeslot: *{subscription_data['timeslot_name']}*
-• Duration: *{subscription_data['start_date']}* to *{subscription_data['end_date']}*
-• Amount Paid: *₹{subscription_data['amount_paid']}*
-
-📍 *{LIBRARY_NAME}*
-📞 {LIBRARY_PHONE}
-📧 {LIBRARY_EMAIL}
-🏢 {LIBRARY_ADDRESS}
-
-🔔 You'll receive reminders before your subscription expires.
-
-Thank you for choosing {LIBRARY_NAME}! 
-Happy studying! 📚✨"""
-        
-        return self.send_message(student_data['mobile_number'], message)
 
     def test_message_with_emojis(self, phone_number):
         """Test sending a message with emojis to verify they display correctly"""

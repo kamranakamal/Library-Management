@@ -12,7 +12,8 @@ class Subscription:
     
     def __init__(self, student_id=None, seat_id=None, timeslot_id=None,
                  start_date=None, end_date=None, amount_paid=None,
-                 receipt_number=None, receipt_path=None, subscription_id=None):
+                 receipt_number=None, receipt_path=None, subscription_id=None,
+                 created_at=None):
         self.id = subscription_id
         self.student_id = student_id
         self.seat_id = seat_id
@@ -22,6 +23,7 @@ class Subscription:
         self.amount_paid = amount_paid
         self.receipt_number = receipt_number
         self.receipt_path = receipt_path
+        self.created_at = created_at
         self.is_active = True
         self.db_manager = DatabaseManager()
     
@@ -151,7 +153,8 @@ class Subscription:
         
         query = '''
             SELECT ss.*, s.name as student_name, s.mobile_number,
-                   seat.id as seat_number, t.name as timeslot_name
+                   seat.id as seat_number, t.name as timeslot_name,
+                   t.start_time as timeslot_start, t.end_time as timeslot_end
             FROM student_subscriptions ss
             JOIN students s ON ss.student_id = s.id
             JOIN seats seat ON ss.seat_id = seat.id
@@ -171,7 +174,8 @@ class Subscription:
         
         query = '''
             SELECT ss.*, s.name as student_name, s.mobile_number,
-                   seat.id as seat_number, t.name as timeslot_name
+                   seat.id as seat_number, t.name as timeslot_name,
+                   t.start_time as timeslot_start, t.end_time as timeslot_end
             FROM student_subscriptions ss
             JOIN students s ON ss.student_id = s.id
             JOIN seats seat ON ss.seat_id = seat.id
@@ -183,6 +187,27 @@ class Subscription:
         '''
         
         results = db_manager.execute_query(query, (cutoff_date,))
+        return results
+    
+    @classmethod
+    def get_all_expired_subscriptions(cls):
+        """Get all expired subscriptions regardless of expiry date"""
+        db_manager = DatabaseManager()
+        
+        query = '''
+            SELECT ss.*, s.name as student_name, s.mobile_number,
+                   seat.id as seat_number, t.name as timeslot_name,
+                   t.start_time as timeslot_start, t.end_time as timeslot_end
+            FROM student_subscriptions ss
+            JOIN students s ON ss.student_id = s.id
+            JOIN seats seat ON ss.seat_id = seat.id
+            JOIN timeslots t ON ss.timeslot_id = t.id
+            WHERE ss.is_active = 1 AND s.is_active = 1 
+                  AND ss.end_date < date('now')
+            ORDER BY ss.end_date DESC
+        '''
+        
+        results = db_manager.execute_query(query)
         return results
     
     @classmethod
@@ -210,6 +235,7 @@ class Subscription:
         subscription.amount_paid = row['amount_paid']
         subscription.receipt_number = row['receipt_number']
         subscription.receipt_path = row['receipt_path']
+        subscription.created_at = row['created_at'] if 'created_at' in row else None
         subscription.is_active = bool(row['is_active'])
         return subscription
     

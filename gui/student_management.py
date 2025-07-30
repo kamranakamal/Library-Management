@@ -714,6 +714,7 @@ class StudentManagementFrame(ttk.Frame):
                     'duration_months': duration_months,
                     'created_date': subscription.created_at.strftime('%Y-%m-%d') if hasattr(subscription.created_at, 'strftime') else str(subscription.created_at) if subscription.created_at else 'N/A'
                 }
+                
                 subscription_details.append(sub_detail)
             
             # Import and use WhatsApp automation
