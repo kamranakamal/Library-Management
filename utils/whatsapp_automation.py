@@ -1255,11 +1255,27 @@ class WhatsAppAutomation:
         messages = []
         
         for subscription in expiring_subscriptions:
-            # Format message as a single paragraph to avoid WhatsApp sending line by line
+            # Format message professionally with proper structure and spacing
             # Include timeslot duration (from-to) instead of just timeslot name
             timeslot_duration = f"{subscription['timeslot_start']} to {subscription['timeslot_end']}" if 'timeslot_start' in subscription and 'timeslot_end' in subscription and subscription['timeslot_start'] and subscription['timeslot_end'] else subscription['timeslot_name']
-            # Create message as single continuous string without line breaks
-            message = f"Hello {subscription['student_name']}! This is a reminder from {LIBRARY_NAME} that your library subscription is expiring soon. Details: Seat Number: {subscription['seat_number']}, Timeslot: {timeslot_duration}, Expiry Date: {subscription['end_date']}. Please visit us to renew your subscription. {LIBRARY_NAME} LOCATION {LIBRARY_ADDRESS} PHONE {LIBRARY_PHONE} EMAIL {LIBRARY_EMAIL} Thank you for choosing {LIBRARY_NAME}!"
+            
+            # Create a professionally formatted message with clear sections
+            message = (
+                f"🔔 *SUBSCRIPTION EXPIRY REMINDER*\n\n"
+                f"Hello {subscription['student_name']}!\n\n"
+                f"This is a friendly reminder that your library subscription is expiring soon.\n\n"
+                f"📋 *Subscription Details:*\n"
+                f"   • Seat Number: {subscription['seat_number']}\n"
+                f"   • Timeslot: {timeslot_duration}\n"
+                f"   • Expiry Date: {subscription['end_date']}\n\n"
+                f"Please visit us to renew your subscription before the expiry date to avoid cancellation.\n\n"
+                f"📍 *{LIBRARY_NAME} Location:*\n"
+                f"{LIBRARY_ADDRESS}\n\n"
+                f"📞 *Contact Information:*\n"
+                f"   • Phone: {LIBRARY_PHONE}\n"
+                f"   • Email: {LIBRARY_EMAIL}\n\n"
+                f"Thank you for choosing {LIBRARY_NAME}!"
+            )
             
             messages.append({
                 'name': subscription['student_name'],
@@ -1274,11 +1290,32 @@ class WhatsAppAutomation:
         messages = []
         
         for subscription in expired_subscriptions:
-            # Format message as a single paragraph to avoid WhatsApp sending line by line
+            # Format message professionally with proper structure and spacing
             # Include timeslot duration (from-to) instead of just timeslot name
             timeslot_duration = f"{subscription['timeslot_start']} to {subscription['timeslot_end']}" if 'timeslot_start' in subscription and 'timeslot_end' in subscription and subscription['timeslot_start'] and subscription['timeslot_end'] else subscription['timeslot_name']
-            # Create message as single continuous string without line breaks
-            message = f"Dear {subscription['student_name']}, We regret to inform you that your library subscription has been cancelled due to expiration. DETAILS Expired Subscription Details: Seat Number: {subscription['seat_number']}, Timeslot: {timeslot_duration}, Expiry Date: {subscription['end_date']}. READMISSION For Readmission: If you wish to continue using our library services, please contact us immediately for readmission. CONTACT Contact for Readmission: WhatsApp: {LIBRARY_PHONE}, Visit: {LIBRARY_ADDRESS}, Email: {LIBRARY_EMAIL}. We understand that circumstances can cause delays, and we're here to help you get back on track with your studies. QUICK Quick Readmission: Simply reply to this message or call us at {LIBRARY_PHONE} to discuss readmission options and available seats. Thank you for being part of {LIBRARY_NAME}. We hope to welcome you back soon! Best regards, {LIBRARY_NAME} Team"
+            
+            # Create a professionally formatted message with clear sections
+            message = (
+                f"📢 *SUBSCRIPTION CANCELLATION NOTICE*\n\n"
+                f"Dear {subscription['student_name']},\n\n"
+                f"We regret to inform you that your library subscription has expired and has been cancelled.\n\n"
+                f"📋 *Subscription Details:*\n"
+                f"   • Seat Number: {subscription['seat_number']}\n"
+                f"   • Timeslot: {timeslot_duration}\n"
+                f"   • Expiry Date: {subscription['end_date']}\n\n"
+                f"🔄 *Readmission Process:*\n"
+                f"If you wish to continue using our library services, please contact us immediately for readmission.\n\n"
+                f"📞 *Contact Information:*\n"
+                f"   • WhatsApp: {LIBRARY_PHONE}\n"
+                f"   • Visit: {LIBRARY_ADDRESS}\n"
+                f"   • Email: {LIBRARY_EMAIL}\n\n"
+                f"We understand that circumstances can cause delays, and we're here to help you get back on track with your studies.\n\n"
+                f"⚡ *Quick Readmission:*\n"
+                f"Simply reply to this message or call us at {LIBRARY_PHONE} to discuss readmission options and available seats.\n\n"
+                f"Thank you for being part of {LIBRARY_NAME}. We hope to welcome you back soon!\n\n"
+                f"Best regards,\n"
+                f"{LIBRARY_NAME} Team"
+            )
             
             messages.append({
                 'name': subscription['student_name'],
@@ -1293,9 +1330,25 @@ class WhatsAppAutomation:
         messages = []
         
         for borrowing in overdue_borrowings:
-            # Format message as a single paragraph to avoid WhatsApp sending line by line
-            # Create message as single continuous string without line breaks
-            message = f"Hello {borrowing['student_name']}! This is a reminder that the book \"{borrowing['book_title']}\" borrowed on {borrowing['borrow_date']} is now overdue. BOOK DETAILS Title: {borrowing['book_title']}, Author: {borrowing['author']}, Borrowed On: {borrowing['borrow_date']}, Due Date: {borrowing['due_date']}. Please return the book as soon as possible to avoid late fees. {LIBRARY_NAME} LOCATION {LIBRARY_ADDRESS} PHONE {LIBRARY_PHONE} EMAIL {LIBRARY_EMAIL} Thank you for your cooperation!"
+            # Format message professionally with proper structure and spacing
+            # Create a professionally formatted message with clear sections
+            message = (
+                f"📚 *OVERDUE BOOK REMINDER*\n\n"
+                f"Hello {borrowing['student_name']}!\n\n"
+                f"This is a reminder that the following book is now overdue:\n\n"
+                f"📖 *Book Details:*\n"
+                f"   • Title: {borrowing['book_title']}\n"
+                f"   • Author: {borrowing['author']}\n"
+                f"   • Borrowed On: {borrowing['borrow_date']}\n"
+                f"   • Due Date: {borrowing['due_date']}\n\n"
+                f"Please return the book as soon as possible to avoid late fees.\n\n"
+                f"📍 *{LIBRARY_NAME} Location:*\n"
+                f"{LIBRARY_ADDRESS}\n\n"
+                f"📞 *Contact Information:*\n"
+                f"   • Phone: {LIBRARY_PHONE}\n"
+                f"   • Email: {LIBRARY_EMAIL}\n\n"
+                f"Thank you for your cooperation!"
+            )
             
             messages.append({
                 'name': borrowing['student_name'],

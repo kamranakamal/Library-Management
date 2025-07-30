@@ -796,11 +796,23 @@ The message includes readmission contact information and encourages them to retu
         widget.bind("<Enter>", on_enter)
         widget.bind("<Leave>", on_leave)
     
+    def update_progress(self, message, progress=None):
+        """Update progress message with optional progress indicator"""
+        try:
+            if hasattr(self, 'progress_label') and self.progress_label.winfo_exists():
+                self.progress_label.config(text=message)
+                # Only update UI if window still exists
+                if hasattr(self, 'window') and self.window.winfo_exists():
+                    self.window.update_idletasks()
+        except Exception as e:
+            print(f"Error updating progress: {e}")
+    
     def update_ui_responsively(self):
         """Update UI elements responsively"""
         try:
             # Force GUI update
-            self.window.update_idletasks()
+            if hasattr(self, 'window') and self.window.winfo_exists():
+                self.window.update_idletasks()
         except Exception:
             pass
     
@@ -1043,50 +1055,78 @@ The message includes readmission contact information and encourages them to retu
         threading.Thread(target=load_thread, daemon=True).start()
     
     def send_subscription_reminders(self):
-        """Send subscription reminder messages"""
+        """Send subscription reminder messages with improved responsiveness"""
         if not self.whatsapp.is_logged_in:
             messagebox.showwarning("Warning", "Please login to WhatsApp first")
             return
         
-        def send_thread():
-            try:
-                # Get only selected students
-                selected_subs = []
-                for item_id, data in self.reminder_selections.items():
-                    if data['selected']:
-                        selected_subs.append(data['data'])
-                
-                if not selected_subs:
-                    self.log_message("No students selected for reminders")
-                    return
-                
-                self.log_message(f"Sending consolidated reminders to {len(selected_subs)} selected students...")
-                
-                # Use consolidated reminders for selected students only
-                results = self.whatsapp.send_consolidated_reminders(selected_subs)
-                
-                successful = len([r for r in results if r['success']])
-                failed = len(results) - successful
-                
-                self.log_message(f"Consolidated reminders sent: {successful} successful, {failed} failed")
-                
-                # Show detailed results
-                for result in results:
-                    status = "✓" if result['success'] else "✗"
-                    self.log_message(f"{status} {result['name']}: {result['message']}")
-                
-            except Exception as e:
-                self.log_message(f"Error sending reminders: {str(e)}")
+        # Get only selected students
+        selected_subs = []
+        for item_id, data in self.reminder_selections.items():
+            if data['selected']:
+                selected_subs.append(data['data'])
         
-        # Check if any students are selected
-        selected_count = sum(1 for data in self.reminder_selections.values() if data['selected'])
-        if selected_count == 0:
-            messagebox.showwarning("Warning", "Please select at least one student to send reminders to.")
+        if not selected_subs:
+            messagebox.showwarning("Warning", "No students selected for reminders. Please select at least one student.")
             return
         
         # Confirm before sending
-        if messagebox.askyesno("Confirm", f"Send subscription reminders to {selected_count} selected students?"):
-            threading.Thread(target=send_thread, daemon=True).start()
+        confirm = messagebox.askyesno("Confirm Send", 
+                                    f"Are you sure you want to send subscription reminders to {len(selected_subs)} selected students?")
+        if not confirm:
+            return
+        
+        # Disable all buttons in the reminders tab during sending
+        self.set_buttons_state(self.reminder_tree.master.master, 'disabled')
+        
+        def send_thread():
+            try:
+                self.log_message(f"Starting to send subscription reminders to {len(selected_subs)} students...")
+                
+                # Send messages with progress updates
+                total = len(selected_subs)
+                success_count = 0
+                fail_count = 0
+                
+                # Process in smaller batches for better responsiveness
+                batch_size = 5
+                for i in range(0, total, batch_size):
+                    batch = selected_subs[i:i+batch_size]
+                    
+                    # Update progress
+                    progress_msg = f"Sending subscription reminders... ({i+1}-{min(i+batch_size, total)}/{total})"
+                    self.window.after(0, lambda msg=progress_msg: self.update_progress(msg))
+                    
+                    # Send batch
+                    batch_success, batch_fail = self.whatsapp.send_subscription_reminders(batch)
+                    success_count += batch_success
+                    fail_count += batch_fail
+                    
+                    # Brief pause to allow UI updates
+                    import time
+                    time.sleep(0.1)
+                
+                # Update UI in main thread
+                def update_ui():
+                    self.set_buttons_state(self.reminder_tree.master.master, 'normal')
+                    self.update_progress("")
+                    self.log_message(f"✅ Subscription reminders sent! Success: {success_count}, Failed: {fail_count}")
+                    messagebox.showinfo("Messages Sent", 
+                                      f"Subscription reminders sent successfully!\n\nSuccess: {success_count}\nFailed: {fail_count}")
+                
+                self.window.after(0, update_ui)
+                
+            except Exception as e:
+                def show_error():
+                    self.set_buttons_state(self.reminders_frame, 'normal')
+                    self.update_progress("")
+                    self.log_message(f"❌ Error sending subscription reminders: {str(e)}")
+                    messagebox.showerror("Error", f"Failed to send subscription reminders: {str(e)}")
+                
+                self.window.after(0, show_error)
+        
+        # Start sending in background thread
+        threading.Thread(target=send_thread, daemon=True).start()
     
     def load_expired_subscriptions(self):
         """Load expired subscriptions for cancellation messages"""
@@ -1145,46 +1185,74 @@ The message includes readmission contact information and encourages them to retu
         threading.Thread(target=load_thread, daemon=True).start()
     
     def send_cancellation_messages(self):
-        """Send cancellation messages to selected expired students"""
-        # Get only selected expired subscriptions
-        selected_subs = []
+        """Send cancellation messages to selected students with improved responsiveness"""
+        # Get selected students
+        selected_students = []
         for item_id, data in self.cancellation_selections.items():
             if data['selected']:
-                selected_subs.append(data['data'])
+                selected_students.append(data['data'])
         
-        if not selected_subs:
-            messagebox.showwarning("Warning", "No students selected for cancellation messages. Please select at least one student or load expired subscriptions first.")
+        if not selected_students:
+            messagebox.showwarning("No Selection", "Please select at least one student to send cancellation messages.")
             return
+        
+        # Confirm before sending
+        confirm = messagebox.askyesno("Confirm Send", 
+                                    f"Are you sure you want to send cancellation messages to {len(selected_students)} selected students?")
+        if not confirm:
+            return
+        
+        # Disable all buttons in the cancellations tab during sending
+        self.set_buttons_state(self.cancellation_tree.master.master, 'disabled')
         
         def send_thread():
             try:
-                self.log_message(f"Sending cancellation messages to {len(selected_subs)} selected students...")
+                self.log_message(f"Starting to send cancellation messages to {len(selected_students)} students...")
                 
-                results = self.whatsapp.send_subscription_cancellations(selected_subs)
+                # Send messages with progress updates
+                total = len(selected_students)
+                success_count = 0
+                fail_count = 0
                 
-                successful = len([r for r in results if r['success']])
-                failed = len(results) - successful
+                # Process in smaller batches for better responsiveness
+                batch_size = 5
+                for i in range(0, total, batch_size):
+                    batch = selected_students[i:i+batch_size]
+                    
+                    # Update progress
+                    progress_msg = f"Sending cancellation messages... ({i+1}-{min(i+batch_size, total)}/{total})"
+                    self.window.after(0, lambda msg=progress_msg: self.update_progress(msg))
+                    
+                    # Send batch
+                    batch_success, batch_fail = self.whatsapp.send_subscription_cancellations(batch)
+                    success_count += batch_success
+                    fail_count += batch_fail
+                    
+                    # Brief pause to allow UI updates
+                    import time
+                    time.sleep(0.1)
                 
-                self.log_message(f"Cancellation messages sent: {successful} successful, {failed} failed")
+                # Update UI in main thread
+                def update_ui():
+                    self.set_buttons_state(self.cancellation_tree.master.master, 'normal')
+                    self.update_progress("")
+                    self.log_message(f"✅ Cancellation messages sent! Success: {success_count}, Failed: {fail_count}")
+                    messagebox.showinfo("Messages Sent", 
+                                      f"Cancellation messages sent successfully!\n\nSuccess: {success_count}\nFailed: {fail_count}")
                 
-                # Show detailed results
-                for result in results:
-                    status = "✓" if result['success'] else "✗"
-                    self.log_message(f"{status} {result['name']}: {result['message']}")
+                self.window.after(0, update_ui)
                 
             except Exception as e:
-                self.log_message(f"Error sending cancellation messages: {str(e)}")
+                def show_error():
+                    self.set_buttons_state(self.cancellations_frame, 'normal')
+                    self.update_progress("")
+                    self.log_message(f"❌ Error sending cancellation messages: {str(e)}")
+                    messagebox.showerror("Error", f"Failed to send cancellation messages: {str(e)}")
+                
+                self.window.after(0, show_error)
         
-        # Confirm before sending with warning
-        warning_message = (
-            f"⚠️ WARNING: This will send CANCELLATION messages to {len(selected_subs)} selected students.\n\n"
-            "These messages inform students that their subscriptions have been cancelled "
-            "due to expiration and provide readmission contact information.\n\n"
-            "Are you sure you want to proceed?"
-        )
-        
-        if messagebox.askyesno("Confirm Cancellation Messages", warning_message):
-            threading.Thread(target=send_thread, daemon=True).start()
+        # Start sending in background thread
+        threading.Thread(target=send_thread, daemon=True).start()
     
     def send_custom_messages(self):
         """Send custom messages"""
