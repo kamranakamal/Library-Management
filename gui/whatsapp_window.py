@@ -232,7 +232,9 @@ Note: Keep this window open while using WhatsApp automation.
     
     def create_reminders_tab(self, parent):
         """Create subscription reminders tab"""
-        reminders_frame = ttk.Frame(parent)
+        # Make this frame accessible to other methods
+        self.reminders_frame = ttk.Frame(parent)
+        reminders_frame = self.reminders_frame
         parent.add(reminders_frame, text="Subscription Reminders")
         
         # Configure frame grid
@@ -1117,11 +1119,12 @@ The message includes readmission contact information and encourages them to retu
                 self.window.after(0, update_ui)
                 
             except Exception as e:
-                def show_error():
+                error_msg = str(e)
+                def show_error(msg=error_msg):
                     self.set_buttons_state(self.reminders_frame, 'normal')
                     self.update_progress("")
-                    self.log_message(f"❌ Error sending subscription reminders: {str(e)}")
-                    messagebox.showerror("Error", f"Failed to send subscription reminders: {str(e)}")
+                    self.log_message(f"❌ Error sending subscription reminders: {msg}")
+                    messagebox.showerror("Error", f"Failed to send subscription reminders: {msg}")
                 
                 self.window.after(0, show_error)
         

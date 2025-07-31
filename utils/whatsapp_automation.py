@@ -1243,38 +1243,78 @@ class WhatsAppAutomation:
                 'message': result_message
             })
             
-            # Reduced delay for faster bulk sending - only 1 second between messages
+            # Add spacing between messages for better delivery and readability
             if index < total_contacts:  # Don't wait after the last message
-                time.sleep(1)  # Reduced from 2 seconds to 1 second
+                time.sleep(2)  # 2 seconds between messages for better spacing
         
         print(f"✅ Bulk message sending completed. {sum(1 for r in results if r['success'])}/{total_contacts} messages sent successfully.")
         return results
     
+    def _format_time(self, t):
+        """Convert a time/datetime/str into a readable 'H:MM AM/PM' string"""
+        import datetime
+        if t is None:
+            return None
+        if isinstance(t, datetime.datetime):
+            t = t.time()
+        if isinstance(t, datetime.time):
+            return t.strftime('%I:%M %p').lstrip('0')
+        if isinstance(t, str):
+            # Accept 'HH:MM[:SS]' strings
+            for fmt in ('%H:%M:%S', '%H:%M'):
+                try:
+                    parsed = datetime.datetime.strptime(t, fmt).time()
+                    return parsed.strftime('%I:%M %p').lstrip('0')
+                except ValueError:
+                    continue
+            return t  # fallback
+        return str(t)
+
     def send_subscription_reminders(self, expiring_subscriptions):
         """Send subscription expiry reminders with timeslot duration and optimized speed"""
         messages = []
         
         for subscription in expiring_subscriptions:
             # Format message professionally with proper structure and spacing
-            # Include timeslot duration (from-to) instead of just timeslot name
-            timeslot_duration = f"{subscription['timeslot_start']} to {subscription['timeslot_end']}" if 'timeslot_start' in subscription and 'timeslot_end' in subscription and subscription['timeslot_start'] and subscription['timeslot_end'] else subscription['timeslot_name']
-            
-            # Create a professionally formatted message with clear sections
+            # Build a user-friendly timeslot string "HH:MM AM/PM – HH:MM AM/PM (X hrs)"
+            def _get(key, default=None):
+                return subscription[key] if key in subscription.keys() else default
+
+            start_raw = _get('timeslot_start')
+            end_raw   = _get('timeslot_end')
+            if start_raw and end_raw:
+                start_f = self._format_time(start_raw)
+                end_f   = self._format_time(end_raw)
+                # Calculate duration in hours
+                try:
+                    import datetime as _dt
+                    s_dt = _dt.datetime.strptime(start_f, '%I:%M %p')
+                    e_dt = _dt.datetime.strptime(end_f,   '%I:%M %p')
+                    # Handle overnight
+                    if e_dt <= s_dt:
+                        e_dt += _dt.timedelta(days=1)
+                    dur_hrs = round((e_dt - s_dt).seconds / 3600, 1)
+                    timeslot_str = f"{start_f} – {end_f}  ({dur_hrs} hrs)"
+                except Exception:
+                    timeslot_str = f"{start_f} – {end_f}"
+            else:
+                timeslot_str = _get('timeslot_name', 'N/A')
+
+            # Professionally formatted message with clear spacing and Markdown styling
             message = (
-                f"🔔 *SUBSCRIPTION EXPIRY REMINDER*\n\n"
-                f"Hello {subscription['student_name']}!\n\n"
-                f"This is a friendly reminder that your library subscription is expiring soon.\n\n"
-                f"📋 *Subscription Details:*\n"
-                f"   • Seat Number: {subscription['seat_number']}\n"
-                f"   • Timeslot: {timeslot_duration}\n"
-                f"   • Expiry Date: {subscription['end_date']}\n\n"
-                f"Please visit us to renew your subscription before the expiry date to avoid cancellation.\n\n"
-                f"📍 *{LIBRARY_NAME} Location:*\n"
-                f"{LIBRARY_ADDRESS}\n\n"
-                f"📞 *Contact Information:*\n"
-                f"   • Phone: {LIBRARY_PHONE}\n"
-                f"   • Email: {LIBRARY_EMAIL}\n\n"
-                f"Thank you for choosing {LIBRARY_NAME}!"
+                "*🔔 SUBSCRIPTION EXPIRY REMINDER*\n\n"
+                f"Dear *{subscription['student_name']}*,\n\n"
+                "Your library subscription is about to expire. Please review the details below:\n\n"
+                "*Subscription Details*\n"
+                f"• *Seat Number:* {subscription['seat_number']}\n"
+                f"• *Timeslot:* {timeslot_str}\n"
+                f"• *Expiry Date:* {subscription['end_date']}\n\n"
+                "Kindly renew before the expiry date to avoid cancellation.\n\n"
+                f"*{LIBRARY_NAME} Location*\n{LIBRARY_ADDRESS}\n\n"
+                "*Contact*\n"
+                f"• Phone: {LIBRARY_PHONE}\n"
+                f"• Email: {LIBRARY_EMAIL}\n\n"
+                "Thank you for choosing *Sangharsh Library*! We look forward to serving you again.\n"
             )
             
             messages.append({
@@ -1294,26 +1334,26 @@ class WhatsAppAutomation:
             # Include timeslot duration (from-to) instead of just timeslot name
             timeslot_duration = f"{subscription['timeslot_start']} to {subscription['timeslot_end']}" if 'timeslot_start' in subscription and 'timeslot_end' in subscription and subscription['timeslot_start'] and subscription['timeslot_end'] else subscription['timeslot_name']
             
-            # Create a professionally formatted message with clear sections
+            # Create a professionally formatted message with clear sections and proper line breaks
             message = (
-                f"📢 *SUBSCRIPTION CANCELLATION NOTICE*\n\n"
+                "📢 *SUBSCRIPTION CANCELLATION NOTICE*\n\n"
                 f"Dear {subscription['student_name']},\n\n"
-                f"We regret to inform you that your library subscription has expired and has been cancelled.\n\n"
-                f"📋 *Subscription Details:*\n"
+                "We regret to inform you that your library subscription has expired and has been cancelled.\n\n"
+                "📋 *Subscription Details:*\n"
                 f"   • Seat Number: {subscription['seat_number']}\n"
                 f"   • Timeslot: {timeslot_duration}\n"
                 f"   • Expiry Date: {subscription['end_date']}\n\n"
-                f"🔄 *Readmission Process:*\n"
-                f"If you wish to continue using our library services, please contact us immediately for readmission.\n\n"
-                f"📞 *Contact Information:*\n"
+                "🔄 *Readmission Process:*\n"
+                "If you wish to continue using our library services, please contact us immediately for readmission.\n\n"
+                "📞 *Contact Information:*\n"
                 f"   • WhatsApp: {LIBRARY_PHONE}\n"
                 f"   • Visit: {LIBRARY_ADDRESS}\n"
                 f"   • Email: {LIBRARY_EMAIL}\n\n"
-                f"We understand that circumstances can cause delays, and we're here to help you get back on track with your studies.\n\n"
-                f"⚡ *Quick Readmission:*\n"
+                "We understand that circumstances can cause delays, and we're here to help you get back on track with your studies.\n\n"
+                "⚡ *Quick Readmission:*\n"
                 f"Simply reply to this message or call us at {LIBRARY_PHONE} to discuss readmission options and available seats.\n\n"
                 f"Thank you for being part of {LIBRARY_NAME}. We hope to welcome you back soon!\n\n"
-                f"Best regards,\n"
+                "Best regards,\n"
                 f"{LIBRARY_NAME} Team"
             )
             
@@ -1331,23 +1371,23 @@ class WhatsAppAutomation:
         
         for borrowing in overdue_borrowings:
             # Format message professionally with proper structure and spacing
-            # Create a professionally formatted message with clear sections
+            # Create a professionally formatted message with clear sections and proper line breaks
             message = (
-                f"📚 *OVERDUE BOOK REMINDER*\n\n"
+                "📚 *OVERDUE BOOK REMINDER*\n\n"
                 f"Hello {borrowing['student_name']}!\n\n"
-                f"This is a reminder that the following book is now overdue:\n\n"
-                f"📖 *Book Details:*\n"
+                "This is a reminder that the following book is now overdue:\n\n"
+                "📖 *Book Details:*\n"
                 f"   • Title: {borrowing['book_title']}\n"
                 f"   • Author: {borrowing['author']}\n"
                 f"   • Borrowed On: {borrowing['borrow_date']}\n"
                 f"   • Due Date: {borrowing['due_date']}\n\n"
-                f"Please return the book as soon as possible to avoid late fees.\n\n"
+                "Please return the book as soon as possible to avoid late fees.\n\n"
                 f"📍 *{LIBRARY_NAME} Location:*\n"
                 f"{LIBRARY_ADDRESS}\n\n"
-                f"📞 *Contact Information:*\n"
+                "📞 *Contact Information:*\n"
                 f"   • Phone: {LIBRARY_PHONE}\n"
                 f"   • Email: {LIBRARY_EMAIL}\n\n"
-                f"Thank you for your cooperation!"
+                "Thank you for your cooperation!"
             )
             
             messages.append({
@@ -1360,11 +1400,35 @@ class WhatsAppAutomation:
     
     def send_subscription_confirmation(self, subscription_data):
         """Send subscription confirmation message with timeslot duration"""
-        # Format message as a single paragraph to avoid WhatsApp sending line by line
+        # Format message with proper line breaks for better readability
         # Include timeslot duration (from-to) instead of just timeslot name
         timeslot_duration = f"{subscription_data['timeslot_start']} to {subscription_data['timeslot_end']}" if 'timeslot_start' in subscription_data and 'timeslot_end' in subscription_data and subscription_data['timeslot_start'] and subscription_data['timeslot_end'] else subscription_data['timeslot_name']
-        # Create message as single continuous string without line breaks
-        message = f"WELCOME Welcome to {LIBRARY_NAME}! Dear {subscription_data['student_name']}, Your subscription has been successfully confirmed! DETAILS Subscription Details: Receipt No: {subscription_data['receipt_number']}, Seat Number: {subscription_data['seat_id']}, Timeslot: {timeslot_duration}, Duration: {subscription_data['start_date']} to {subscription_data['end_date']}, Amount Paid: Rs. {subscription_data['amount_paid']}. LIBRARY {LIBRARY_NAME} LOCATION {LIBRARY_ADDRESS} PHONE {LIBRARY_PHONE} EMAIL {LIBRARY_EMAIL} Thank you for choosing {LIBRARY_NAME}! We wish you all the best in your studies. Best regards, {LIBRARY_NAME} Team"
+        
+        # Create message with proper line breaks
+        message = (
+            f"WELCOME\n\n"
+            f"Welcome to {LIBRARY_NAME}!\n\n"
+            f"Dear {subscription_data['student_name']},\n\n"
+            f"Your subscription has been successfully confirmed!\n\n"
+            f"DETAILS\n"
+            f"Subscription Details:\n"
+            f"   • Receipt No: {subscription_data['receipt_number']}\n"
+            f"   • Seat Number: {subscription_data['seat_id']}\n"
+            f"   • Timeslot: {timeslot_duration}\n"
+            f"   • Duration: {subscription_data['start_date']} to {subscription_data['end_date']}\n"
+            f"   • Amount Paid: Rs. {subscription_data['amount_paid']}\n\n"
+            f"LIBRARY\n"
+            f"{LIBRARY_NAME}\n\n"
+            f"LOCATION\n"
+            f"{LIBRARY_ADDRESS}\n\n"
+            f"PHONE\n"
+            f"{LIBRARY_PHONE}\n\n"
+            f"EMAIL\n"
+            f"{LIBRARY_EMAIL}\n\n"
+            f"Thank you for choosing {LIBRARY_NAME}! We wish you all the best in your studies.\n\n"
+            f"Best regards,\n"
+            f"{LIBRARY_NAME} Team"
+        )
         
         return self.send_message(subscription_data['mobile_number'], message)
     
@@ -1503,11 +1567,39 @@ class WhatsAppAutomation:
             
             if len(subscriptions) == 1:
                 sub = subscriptions[0]
-                timeslot_duration = f"{sub['timeslot_start'] if 'timeslot_start' in sub else ''} to {sub['timeslot_end'] if 'timeslot_end' in sub else ''}" if 'timeslot_start' in sub and 'timeslot_end' in sub else sub['timeslot_name']
-                message = f"REMINDER Subscription Reminder: Hello {name}! Your library subscription is expiring soon. DETAILS Subscription Details: Seat Number: {sub['seat_number']}, Timeslot: {timeslot_duration}, Expiry Date: {sub['end_date']}. RENEWAL Please visit us to renew your subscription. {LIBRARY_NAME} LOCATION {LIBRARY_ADDRESS} PHONE {LIBRARY_PHONE} EMAIL {LIBRARY_EMAIL} Thank you for choosing {LIBRARY_NAME}!"
+                timeslot_duration = f"{sub['timeslot_start']} to {sub['timeslot_end']}" if 'timeslot_start' in sub and 'timeslot_end' in sub and sub['timeslot_start'] and sub['timeslot_end'] else sub['timeslot_name']
+                message = (
+                    "🔔 *SUBSCRIPTION REMINDER*\n\n"
+                    f"Hello {name}!\n\n"
+                    "This is a reminder that your library subscription is expiring soon.\n\n"
+                    "📋 *Subscription Details:*\n"
+                    f"   • Seat Number: {sub['seat_number']}\n"
+                    f"   • Timeslot: {timeslot_duration}\n"
+                    f"   • Expiry Date: {sub['end_date']}\n\n"
+                    "Please visit us to renew your subscription before the expiry date to avoid cancellation.\n\n"
+                    f"📍 *{LIBRARY_NAME} Location:*\n"
+                    f"{LIBRARY_ADDRESS}\n\n"
+                    "📞 *Contact Information:*\n"
+                    f"   • Phone: {LIBRARY_PHONE}\n"
+                    f"   • Email: {LIBRARY_EMAIL}\n\n"
+                    f"Thank you for choosing {LIBRARY_NAME}!"
+                )
             else:
-                subs_details = ", ".join([f"Seat {sub['seat_number']} | {sub['timeslot_start'] + ' to ' + sub['timeslot_end'] if 'timeslot_start' in sub and 'timeslot_end' in sub else sub['timeslot_name']} | Expires: {sub['end_date']}" for sub in subscriptions])
-                message = f"REMINDERS Multiple Subscription Reminders: Hello {name}! You have {len(subscriptions)} subscriptions expiring soon. DETAILS Subscription Details: {subs_details}. RENEWAL Please visit us to renew your subscriptions. {LIBRARY_NAME} LOCATION {LIBRARY_ADDRESS} PHONE {LIBRARY_PHONE} EMAIL {LIBRARY_EMAIL} Thank you for choosing {LIBRARY_NAME}!"
+                subs_details = "\n".join([f"   • Seat {sub['seat_number']} | {sub['timeslot_start'] + ' to ' + sub['timeslot_end'] if 'timeslot_start' in sub and 'timeslot_end' in sub and sub['timeslot_start'] and sub['timeslot_end'] else sub['timeslot_name']} | Expires: {sub['end_date']}" for sub in subscriptions])
+                message = (
+                    "🔔 *MULTIPLE SUBSCRIPTION REMINDERS*\n\n"
+                    f"Hello {name}!\n\n"
+                    f"You have {len(subscriptions)} library subscriptions expiring soon.\n\n"
+                    "📋 *Subscription Details:*\n"
+                    f"{subs_details}\n\n"
+                    "Please visit us to renew your subscriptions before the expiry dates to avoid cancellation.\n\n"
+                    f"📍 *{LIBRARY_NAME} Location:*\n"
+                    f"{LIBRARY_ADDRESS}\n\n"
+                    "📞 *Contact Information:*\n"
+                    f"   • Phone: {LIBRARY_PHONE}\n"
+                    f"   • Email: {LIBRARY_EMAIL}\n\n"
+                    f"Thank you for choosing {LIBRARY_NAME}!"
+                )
             
             messages.append({'name': name, 'phone': phone, 'message': message})
         
