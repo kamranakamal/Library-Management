@@ -693,8 +693,9 @@ class SeatManagementFrame(ttk.Frame):
                 
                 if response:
                     # Mark expired subscriptions as inactive
-                    cleanup_query = "UPDATE student_subscriptions SET is_active = 0 WHERE is_active = 1 AND end_date < date('now')"
-                    db_manager.execute_query(cleanup_query)
+
+
+                    
                     
                     messagebox.showinfo("Success", 
                         f"Marked {expired_count} expired subscriptions as inactive.\n\n"
@@ -791,10 +792,7 @@ class SeatManagementFrame(ttk.Frame):
             text_widget.insert('1.0', diagnosis_text)
             text_widget.config(state='disabled')
             
-            # Add cleanup button if needed
-            if any(sub['is_active'] and date.fromisoformat(sub['end_date']) < today for sub in all_subscriptions):
-                ttk.Button(diagnosis_window, text="Cleanup Expired Subscriptions", 
-                          command=lambda: [diagnosis_window.destroy(), self.cleanup_expired_subscriptions()]).pack(pady=5)
+
             
             ttk.Button(diagnosis_window, text="Close", command=diagnosis_window.destroy).pack(pady=5)
                 

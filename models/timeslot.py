@@ -179,7 +179,6 @@ class Timeslot:
                 WHERE ss.seat_id = ? 
                 AND ss.is_active = 1
                 AND st.is_active = 1
-                AND ss.end_date >= date('now')
             '''
             existing_subs = self.db_manager.execute_query(conflict_query, (seat['id'],))
             
@@ -201,7 +200,7 @@ class Timeslot:
             SELECT COUNT(*) as occupied_seats,
                    (SELECT COUNT(*) FROM seats WHERE is_active = 1) as total_seats
             FROM student_subscriptions 
-            WHERE timeslot_id = ? AND is_active = 1 AND end_date >= date('now')
+            WHERE timeslot_id = ? AND is_active = 1
         '''
         result = self.db_manager.execute_query(query, (self.id,))
         if result:

@@ -34,7 +34,6 @@ class DatabaseOperations:
                 FROM student_subscriptions ss
                 JOIN timeslots t ON ss.timeslot_id = t.id
                 WHERE ss.seat_id = ? AND ss.is_active = 1
-                AND ss.end_date >= date('now')
             '''
             result = self.db_manager.execute_query(query, (seat.id,))
             
@@ -94,7 +93,6 @@ class DatabaseOperations:
             JOIN students s ON ss.student_id = s.id
             WHERE ss.is_active = 1 
             AND s.is_active = 1
-            AND ss.end_date >= date('now')
         '''
         result = self.db_manager.execute_query(query)
         analytics['occupied_seats'] = result[0]['occupied_seats'] if result else 0
@@ -109,7 +107,6 @@ class DatabaseOperations:
             JOIN students s ON ss.student_id = s.id
             WHERE ss.is_active = 1 
             AND s.is_active = 1
-            AND ss.end_date >= date('now')
             GROUP BY ss.seat_id
         '''
         seats_usage = self.db_manager.execute_query(query)
@@ -122,7 +119,6 @@ class DatabaseOperations:
             JOIN students s ON ss.student_id = s.id
             WHERE ss.is_active = 1 
             AND s.is_active = 1
-            AND ss.end_date >= date('now')
         '''
         result = self.db_manager.execute_query(query)
         analytics['assigned_students'] = result[0]['assigned_students'] if result else 0
