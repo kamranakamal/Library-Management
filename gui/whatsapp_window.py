@@ -984,7 +984,7 @@ The message includes readmission contact information and encourages them to retu
                 # Get data in background thread
                 days = int(self.reminder_days_var.get())
                 # Fetch both expiring and already expired subscriptions
-                expiring_subs = Subscription.get_expiring_subscriptions(days_to_expiry=days)
+                expiring_subs = Subscription.get_expiring_soon(days=days)
                 already_expired_subs = Subscription.get_all_expired_subscriptions()
 
                 # Combine and remove duplicates (if any)
@@ -1046,8 +1046,9 @@ The message includes readmission contact information and encourages them to retu
             except Exception as e:
                 # Schedule error message on main thread
                 if hasattr(self, 'window') and self.window.winfo_exists():
+                    error_msg = str(e)  # Capture the error message
                     def show_error():
-                        messagebox.showerror("Error", f"Failed to load expiring subscriptions: {str(e)}")
+                        messagebox.showerror("Error", f"Failed to load expiring subscriptions: {error_msg}")
                         # Re-enable button
                         try:
                             for widget in self.window.winfo_children():
@@ -1143,6 +1144,14 @@ The message includes readmission contact information and encourages them to retu
     def load_expired_subscriptions(self):
         """Load expired subscriptions for cancellation messages"""
         def load_thread():
+            try:
+                # Get all expired subscriptions
+                from models.subscription import Subscription
+                expired_subs = Subscription.get_all_expired_subscriptions()
+                
+                def update_ui():
+                    try:
+                        # Clear existing items
                         for item in self.cancellation_tree.get_children():
                             self.cancellation_tree.delete(item)
                         self.cancellation_selections.clear()
@@ -1180,7 +1189,10 @@ The message includes readmission contact information and encourages them to retu
             except Exception as e:
                 # Schedule error message on main thread
                 if hasattr(self, 'window') and self.window.winfo_exists():
-                    self.window.after(0, lambda: messagebox.showerror("Error", f"Failed to load expired subscriptions: {str(e)}"))
+                    error_msg = str(e)  # Capture the error message
+                    def show_error():
+                        messagebox.showerror("Error", f"Failed to load expired subscriptions: {error_msg}")
+                    self.window.after(0, show_error)
         
         # Run in background thread
         threading.Thread(target=load_thread, daemon=True).start()
