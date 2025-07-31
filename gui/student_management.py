@@ -1612,13 +1612,16 @@ class SubscriptionRenewalDialog(tk.Toplevel):
         try:
             days = int(self.days_var.get())
             from datetime import datetime, timedelta
+            from dateutil.relativedelta import relativedelta
             
             # Handle both string and date objects
             if isinstance(self.subscription.end_date, str):
                 current_end = datetime.strptime(self.subscription.end_date, '%Y-%m-%d').date()
             else:
                 current_end = self.subscription.end_date
-            new_end = current_end + timedelta(days=days)
+            
+            new_start_date = current_end + timedelta(days=1)
+            new_end = new_start_date + relativedelta(days=days)
             
             self.new_end_date_label.config(text=str(new_end))
         except (ValueError, TypeError):
@@ -1637,28 +1640,17 @@ class SubscriptionRenewalDialog(tk.Toplevel):
             if amount < 0:
                 messagebox.showerror("Error", "Amount cannot be negative")
                 return
-            
-            # Calculate new end date
-            from datetime import datetime, timedelta
-            # Handle both string and date objects
-            if isinstance(self.subscription.end_date, str):
-                current_end = datetime.strptime(self.subscription.end_date, '%Y-%m-%d').date()
-            else:
-                current_end = self.subscription.end_date
-            new_end = current_end + timedelta(days=days)
-            
-            # Store original values for receipt generation
-            original_end = self.subscription.end_date
-            original_amount = self.subscription.amount_paid
-            
-            # Update the existing subscription instead of creating new one
-            self.subscription.end_date = str(new_end)
-            self.subscription.amount_paid = amount  # Set to new renewal amount only (not accumulating)
-            self.subscription.is_active = True  # Ensure it's active
-            
-            # Save the updated subscription
-            self.subscription.save()
-            
+
+            # Calculate months for renewal
+            months = days / 30.0
+
+            # Store original values for receipt
+            original_start_date = self.subscription.start_date
+            original_end_date = self.subscription.end_date
+
+            # Renew the subscription
+            self.subscription.renew(months=months, amount=amount)
+
             # Generate receipt with renewal details
             try:
                 from utils.pdf_generator import PDFGenerator
@@ -1677,8 +1669,10 @@ class SubscriptionRenewalDialog(tk.Toplevel):
                     'seat_id': seat.id,
                     'timeslot_name': timeslot.name,
                     'timeslot_time': f"{timeslot.start_time} - {timeslot.end_time}",
-                    'previous_end': str(original_end),
-                    'new_end': str(new_end),
+                    'previous_start': str(original_start_date),
+                    'previous_end': str(original_end_date),
+                    'new_start': str(self.subscription.start_date),
+                    'new_end': str(self.subscription.end_date),
                     'renewal_amount': amount,
                     'total_amount': self.subscription.amount_paid
                 }
@@ -1687,6 +1681,8 @@ class SubscriptionRenewalDialog(tk.Toplevel):
                 
                 if success:
                     logging.info(f"Renewal receipt generated: {result}")
+                    self.subscription.receipt_path = result
+                    self.subscription.save()
                 else:
                     logging.error(f"Receipt generation failed: {result}")
                     
@@ -1694,7 +1690,7 @@ class SubscriptionRenewalDialog(tk.Toplevel):
                 logging.error(f"Receipt generation failed: {e}")
             
             self.renewed = True
-            messagebox.showinfo("Success", f"Subscription renewed successfully!\nExtended until: {new_end}\nRenewal amount: {amount}")
+            messagebox.showinfo("Success", f"Subscription renewed successfully!\nNew period: {self.subscription.start_date} to {self.subscription.end_date}")
             
             # Call analytics refresh callback if available
             if hasattr(self.parent, 'analytics_refresh_callback') and self.parent.analytics_refresh_callback:

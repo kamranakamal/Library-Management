@@ -365,20 +365,26 @@ class Subscription:
             timeslot = Timeslot.get_by_id(self.timeslot_id)
             amount = timeslot.price if timeslot else 0
         
-        # Create new subscription starting from current end date
+        # Extend the current subscription
         from dateutil.relativedelta import relativedelta
-        new_end_date = self.end_date + relativedelta(months=months)
-        
-        new_subscription = Subscription(
-            student_id=self.student_id,
-            seat_id=self.seat_id,
-            timeslot_id=self.timeslot_id,
-            start_date=self.end_date,
-            end_date=new_end_date,
-            amount_paid=amount  # Use new amount, not previous amount
-        )
-        
-        return new_subscription.save()
+        from datetime import date
+
+        # Renew by updating the existing subscription record
+        from datetime import timedelta
+        from dateutil.relativedelta import relativedelta
+
+        # The new start date is the day after the old end date
+        new_start_date = self.end_date + timedelta(days=1)
+        new_end_date = new_start_date + relativedelta(months=int(months))
+
+        # Update the existing subscription record
+        self.start_date = new_start_date
+        self.end_date = new_end_date
+        self.amount_paid = amount
+        self.is_active = True # Re-activate if it was expired
+
+        self.save()
+        return self.id
     
     def is_expired(self):
         """Check if subscription is expired"""

@@ -983,7 +983,17 @@ The message includes readmission contact information and encourages them to retu
             try:
                 # Get data in background thread
                 days = int(self.reminder_days_var.get())
-                expiring_subs = Subscription.get_expiring_soon(days)
+                # Fetch both expiring and already expired subscriptions
+                expiring_subs = Subscription.get_expiring_subscriptions(days_to_expiry=days)
+                already_expired_subs = Subscription.get_all_expired_subscriptions()
+
+                # Combine and remove duplicates (if any)
+                all_subs_dict = {sub['id']: sub for sub in expiring_subs}
+                for sub in already_expired_subs:
+                    if sub['id'] not in all_subs_dict:
+                        all_subs_dict[sub['id']] = sub
+            
+                combined_subs = list(all_subs_dict.values())
                 
                 # Update UI in main thread
                 def update_ui():
@@ -994,7 +1004,7 @@ The message includes readmission contact information and encourages them to retu
                             self.reminder_tree.delete(item)
                         self.reminder_selections.clear()
                         
-                        for sub in expiring_subs:
+                        for sub in combined_subs:
                             from datetime import datetime, date
                             end_date = datetime.strptime(sub['end_date'], '%Y-%m-%d').date()
                             days_left = (end_date - date.today()).days
@@ -1011,8 +1021,7 @@ The message includes readmission contact information and encourages them to retu
                             # Store subscription data for this item
                             self.reminder_selections[item_id] = {'selected': False, 'data': sub}
                         
-                        self.log_message(f"Loaded {len(expiring_subs)} expiring subscriptions")
-                        
+                        self.log_message(f"Loaded {len(combined_subs)} students for reminders (expiring and expired)")                     
                     except Exception as e:
                         self.log_message(f"Error updating UI: {str(e)}")
                         messagebox.showerror("Error", f"Failed to load expiring subscriptions: {str(e)}")
@@ -1134,17 +1143,6 @@ The message includes readmission contact information and encourages them to retu
     def load_expired_subscriptions(self):
         """Load expired subscriptions for cancellation messages"""
         def load_thread():
-            try:
-                # Get data in background thread
-                days = int(self.cancellation_days_var.get())
-                from models.subscription import Subscription
-                
-                expired_subs = Subscription.get_expired_subscriptions(days_expired=days)
-                
-                # Update UI in main thread
-                def update_ui():
-                    try:
-                        # Clear existing items and selections
                         for item in self.cancellation_tree.get_children():
                             self.cancellation_tree.delete(item)
                         self.cancellation_selections.clear()

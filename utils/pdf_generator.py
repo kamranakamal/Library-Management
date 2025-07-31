@@ -137,8 +137,13 @@ class PDFGenerator:
             pdf.cell(0, 6, f"Seat Number: {subscription_data['seat_id']}", 0, 1)
             pdf.cell(0, 6, f"Timeslot: {subscription_data['timeslot_name']}", 0, 1)
             pdf.cell(0, 6, f"Time: {subscription_data['timeslot_time']}", 0, 1)
-            pdf.cell(0, 6, f"Duration: {subscription_data['start_date']} to {subscription_data['end_date']}", 0, 1)
-            
+            if 'new_start' in subscription_data: # It's a renewal
+                pdf.cell(0, 6, f"Previous Period: {subscription_data['previous_start']} to {subscription_data['previous_end']}", 0, 1)
+                pdf.cell(0, 6, f"New Period: {subscription_data['new_start']} to {subscription_data['new_end']}", 0, 1)
+                pdf.cell(0, 6, f"Renewal Amount: {subscription_data['renewal_amount']}", 0, 1)
+            else: # It's a new subscription
+                pdf.cell(0, 6, f"Duration: {subscription_data['start_date']} to {subscription_data['end_date']}", 0, 1)
+                pdf.cell(0, 6, f"Amount Paid: {subscription_data['amount_paid']}", 0, 1)
             if subscription_data.get('locker_number'):
                 pdf.cell(0, 6, f"Locker Number: {subscription_data['locker_number']}", 0, 1)
             
@@ -149,7 +154,10 @@ class PDFGenerator:
             pdf.cell(0, 8, 'Payment Details:', 0, 1)
             pdf.set_font('Arial', '', 12)
             
-            pdf.cell(0, 8, f"Amount Paid: {DEFAULT_CURRENCY} {subscription_data['amount_paid']}", 0, 1)
+            if 'renewal_amount' in subscription_data:
+                pdf.cell(0, 8, f"Renewal Amount: {DEFAULT_CURRENCY} {subscription_data['renewal_amount']}", 0, 1)
+            else:
+                pdf.cell(0, 8, f"Amount Paid: {DEFAULT_CURRENCY} {subscription_data['amount_paid']}", 0, 1)
             pdf.cell(0, 8, f"Payment Date: {subscription_data['payment_date']}", 0, 1)
             pdf.ln(10)
             
