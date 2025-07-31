@@ -218,6 +218,33 @@ class SeatManagementFrame(ttk.Frame):
                                            font=('Arial', 16), fill='red')
                 return
             
+            # Pre-fetch occupancy status for all seats to avoid multiple DB queries
+            self.seat_occupancy_cache = {}
+            try:
+                from datetime import date
+                today = date.today()
+                
+                # Get all active subscriptions in one query
+                db_manager = DatabaseManager()
+                query = '''
+                    SELECT ss.seat_id
+                    FROM student_subscriptions ss
+                    JOIN students s ON ss.student_id = s.id
+                    WHERE ss.is_active = 1 AND s.is_active = 1 AND ss.end_date >= ?
+                '''
+                active_subscriptions = db_manager.execute_query(query, (today,))
+                
+                # Create a set of occupied seat IDs
+                occupied_seat_ids = {row['seat_id'] for row in active_subscriptions}
+                
+                # Cache occupancy status
+                for seat in seats:
+                    self.seat_occupancy_cache[seat.id] = seat.id in occupied_seat_ids
+            except Exception as e:
+                print(f"Warning: Could not pre-fetch seat occupancy: {str(e)}")
+                # If pre-fetch fails, we'll check individually when needed
+                self.seat_occupancy_cache = {}
+            
             # Define layout parameters
             seat_size = 40
             gap = 5
@@ -289,7 +316,7 @@ class SeatManagementFrame(ttk.Frame):
     def get_seat_color(self, seat):
         """Get color for seat based on gender restriction and occupancy"""
         # Check if seat is currently occupied
-        occupied = self.is_seat_occupied(seat.id)
+        occupied = self.seat_occupancy_cache.get(seat.id, False)
         
         if occupied:
             return 'lightcoral'  # Occupied
@@ -347,7 +374,7 @@ class SeatManagementFrame(ttk.Frame):
             self.gender_var.set(seat.gender_restriction)
             
             # Check if seat is occupied
-            occupied = self.is_seat_occupied(seat.id)
+            occupied = self.seat_occupancy_cache.get(seat.id, False)
             
             # Update status and button state based on occupancy
             if occupied:
@@ -361,8 +388,9 @@ class SeatManagementFrame(ttk.Frame):
                 # delete_btn removed for data protection
                 self.gender_combo.config(state='readonly')
             
-            # Load occupancy details
-            self.load_seat_occupancy(seat.id)
+            # Load occupancy details in a separate thread to keep UI responsive
+            import threading
+            threading.Thread(target=self._load_seat_occupancy_thread, args=(seat.id,), daemon=True).start()
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to select seat: {str(e)}")
@@ -461,12 +489,8 @@ class SeatManagementFrame(ttk.Frame):
         except Exception as e:
             messagebox.showerror("Error", f"Failed to create seat: {str(e)}")
     
-    def load_seat_occupancy(self, seat_id):
-        """Load occupancy details for selected seat"""
-        # Clear existing items
-        for item in self.occupancy_tree.get_children():
-            self.occupancy_tree.delete(item)
-        
+    def _load_seat_occupancy_thread(self, seat_id):
+        """Load occupancy details for selected seat in a background thread"""
         try:
             from datetime import date
             today = date.today()
@@ -474,57 +498,77 @@ class SeatManagementFrame(ttk.Frame):
             # Get all subscriptions for this seat (active and expired)
             subscriptions = Subscription.get_by_seat_id(seat_id, active_only=False)
             
-            for sub in subscriptions:
-                # Get related data
-                from models.student import Student
-                from models.timeslot import Timeslot
-                
-                student = Student.get_by_id(sub.student_id)
-                timeslot = Timeslot.get_by_id(sub.timeslot_id)
-                
-                if student and timeslot:
-                    # Determine detailed status
-                    status_parts = []
+            # Schedule UI update on main thread
+            def update_ui():
+                try:
+                    # Clear existing items
+                    for item in self.occupancy_tree.get_children():
+                        self.occupancy_tree.delete(item)
                     
-                    if not student.is_active:
-                        status_parts.append("Student Inactive")
+                    for sub in subscriptions:
+                        # Get related data
+                        from models.student import Student
+                        from models.timeslot import Timeslot
+                        
+                        student = Student.get_by_id(sub.student_id)
+                        timeslot = Timeslot.get_by_id(sub.timeslot_id)
+                        
+                        if student and timeslot:
+                            # Determine detailed status
+                            status_parts = []
+                            
+                            if not student.is_active:
+                                status_parts.append("Student Inactive")
+                            
+                            if not sub.is_active:
+                                status_parts.append("Sub Deactivated")
+                            
+                            if sub.is_expired():
+                                status_parts.append("Expired")
+                            
+                            if not status_parts:
+                                status_parts.append("Active")
+                            
+                            status = " | ".join(status_parts)
+                            
+                            # Color coding based on status
+                            if "Active" in status and len(status_parts) == 1:
+                                # True active subscription
+                                tag = "active"
+                            elif "Expired" in status or "Deactivated" in status:
+                                # Problematic subscription
+                                tag = "problem"
+                            else:
+                                tag = "inactive"
+                            
+                            item = self.occupancy_tree.insert('', 'end', values=(
+                                timeslot.name,
+                                student.name,
+                                sub.start_date,
+                                sub.end_date,
+                                status
+                            ), tags=(tag,))
                     
-                    if not sub.is_active:
-                        status_parts.append("Sub Deactivated")
-                    
-                    if sub.is_expired():
-                        status_parts.append("Expired")
-                    
-                    if not status_parts:
-                        status_parts.append("Active")
-                    
-                    status = " | ".join(status_parts)
-                    
-                    # Color coding based on status
-                    if "Active" in status and len(status_parts) == 1:
-                        # True active subscription
-                        tag = "active"
-                    elif "Expired" in status or "Deactivated" in status:
-                        # Problematic subscription
-                        tag = "problem"
-                    else:
-                        tag = "inactive"
-                    
-                    item = self.occupancy_tree.insert('', 'end', values=(
-                        timeslot.name,
-                        student.name,
-                        sub.start_date,
-                        sub.end_date,
-                        status
-                    ), tags=(tag,))
+                    # Configure tag colors
+                    self.occupancy_tree.tag_configure("active", background="lightgreen")
+                    self.occupancy_tree.tag_configure("problem", background="lightcoral")
+                    self.occupancy_tree.tag_configure("inactive", background="lightgray")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to update seat occupancy UI: {str(e)}")
             
-            # Configure tag colors
-            self.occupancy_tree.tag_configure("active", background="lightgreen")
-            self.occupancy_tree.tag_configure("problem", background="lightcoral")
-            self.occupancy_tree.tag_configure("inactive", background="lightgray")
+            # Schedule UI update on main thread
+            if hasattr(self, 'seat_canvas') and self.seat_canvas.winfo_exists():
+                self.seat_canvas.after(0, update_ui)
         
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to load seat occupancy: {str(e)}")
+            # Schedule error message on main thread
+            if hasattr(self, 'seat_canvas') and self.seat_canvas.winfo_exists():
+                self.seat_canvas.after(0, lambda: messagebox.showerror("Error", f"Failed to load seat occupancy: {str(e)}"))
+    
+    def load_seat_occupancy(self, seat_id):
+        """Load occupancy details for selected seat (deprecated - use _load_seat_occupancy_thread instead)"""
+        import threading
+        threading.Thread(target=self._load_seat_occupancy_thread, args=(seat_id,), daemon=True).start()
     
     def update_seat_gender(self):
         """Update seat gender restriction"""
