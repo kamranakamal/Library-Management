@@ -1302,7 +1302,7 @@ class WhatsAppAutomation:
 
             # Professionally formatted message with clear spacing and Markdown styling
             message = (
-                "*🔔 SUBSCRIPTION EXPIRY REMINDER*\n\n"
+                "*🔔 SUBSCRIPTION EXPIRY REMINDER*\n\n\n"
                 f"Dear *{subscription['student_name']}*,\n\n"
                 "Your library subscription is about to expire. Please review the details below:\n\n"
                 "*Subscription Details*\n"
@@ -1314,7 +1314,9 @@ class WhatsAppAutomation:
                 "*Contact*\n"
                 f"• Phone: {LIBRARY_PHONE}\n"
                 f"• Email: {LIBRARY_EMAIL}\n\n"
-                "Thank you for choosing *Sangharsh Library*! We look forward to serving you again.\n"
+                "Thank you for choosing *Sangharsh Library*! We look forward to serving you again.\n\n"
+                "Best regards,\n"
+                f"{LIBRARY_NAME} Team"
             )
             
             messages.append({
@@ -1336,7 +1338,7 @@ class WhatsAppAutomation:
             
             # Create a professionally formatted message with clear sections and proper line breaks
             message = (
-                "📢 *SUBSCRIPTION CANCELLATION NOTICE*\n\n"
+                "📢 *SUBSCRIPTION CANCELLATION NOTICE*\n\n\n"
                 f"Dear {subscription['student_name']},\n\n"
                 "We regret to inform you that your library subscription has expired and has been cancelled.\n\n"
                 "📋 *Subscription Details:*\n"
@@ -1373,21 +1375,23 @@ class WhatsAppAutomation:
             # Format message professionally with proper structure and spacing
             # Create a professionally formatted message with clear sections and proper line breaks
             message = (
-                "📚 *OVERDUE BOOK REMINDER*\n\n"
+                "📚 *OVERDUE BOOK REMINDER*\n\n\n"
                 f"Hello {borrowing['student_name']}!\n\n"
-                "This is a reminder that the following book is now overdue:\n\n"
+                "This is a reminder that the following book is now overdue:\n\n\n"
                 "📖 *Book Details:*\n"
                 f"   • Title: {borrowing['book_title']}\n"
                 f"   • Author: {borrowing['author']}\n"
                 f"   • Borrowed On: {borrowing['borrow_date']}\n"
-                f"   • Due Date: {borrowing['due_date']}\n\n"
-                "Please return the book as soon as possible to avoid late fees.\n\n"
+                f"   • Due Date: {borrowing['due_date']}\n\n\n"
+                "Please return the book as soon as possible to avoid late fees.\n\n\n"
                 f"📍 *{LIBRARY_NAME} Location:*\n"
-                f"{LIBRARY_ADDRESS}\n\n"
+                f"{LIBRARY_ADDRESS}\n\n\n"
                 "📞 *Contact Information:*\n"
                 f"   • Phone: {LIBRARY_PHONE}\n"
-                f"   • Email: {LIBRARY_EMAIL}\n\n"
-                "Thank you for your cooperation!"
+                f"   • Email: {LIBRARY_EMAIL}\n\n\n"
+                "Thank you for your cooperation!\n\n"
+                "Best regards,\n"
+                f"{LIBRARY_NAME} Team"
             )
             
             messages.append({
@@ -1397,41 +1401,101 @@ class WhatsAppAutomation:
             })
         
         return self.send_bulk_messages(messages)
-    
-    def send_subscription_confirmation(self, subscription_data):
-        """Send subscription confirmation message with timeslot duration"""
-        # Format message with proper line breaks for better readability
-        # Include timeslot duration (from-to) instead of just timeslot name
-        timeslot_duration = f"{subscription_data['timeslot_start']} to {subscription_data['timeslot_end']}" if 'timeslot_start' in subscription_data and 'timeslot_end' in subscription_data and subscription_data['timeslot_start'] and subscription_data['timeslot_end'] else subscription_data['timeslot_name']
+        """Send subscription expiry reminders as consolidated messages per student"""
+        # Group subscriptions by student
+        student_groups = {}
+        for subscription in expiring_subscriptions:
+            phone = subscription['mobile_number']
+            if phone not in student_groups:
+                student_groups[phone] = {
+                    'name': subscription['student_name'],
+                    'subscriptions': []
+                }
+            student_groups[phone]['subscriptions'].append(subscription)
         
-        # Create message with proper line breaks
-        message = (
-            f"WELCOME\n\n"
-            f"Welcome to {LIBRARY_NAME}!\n\n"
-            f"Dear {subscription_data['student_name']},\n\n"
-            f"Your subscription has been successfully confirmed!\n\n"
-            f"DETAILS\n"
-            f"Subscription Details:\n"
-            f"   • Receipt No: {subscription_data['receipt_number']}\n"
-            f"   • Seat Number: {subscription_data['seat_id']}\n"
-            f"   • Timeslot: {timeslot_duration}\n"
-            f"   • Duration: {subscription_data['start_date']} to {subscription_data['end_date']}\n"
-            f"   • Amount Paid: Rs. {subscription_data['amount_paid']}\n\n"
-            f"LIBRARY\n"
-            f"{LIBRARY_NAME}\n\n"
-            f"LOCATION\n"
-            f"{LIBRARY_ADDRESS}\n\n"
-            f"PHONE\n"
-            f"{LIBRARY_PHONE}\n\n"
-            f"EMAIL\n"
-            f"{LIBRARY_EMAIL}\n\n"
-            f"Thank you for choosing {LIBRARY_NAME}! We wish you all the best in your studies.\n\n"
-            f"Best regards,\n"
-            f"{LIBRARY_NAME} Team"
-        )
+        messages = []
+        for phone, data in student_groups.items():
+            name = data['name']
+            subscriptions = data['subscriptions']
+            
+            if len(subscriptions) == 1:
+                sub = subscriptions[0]
+                timeslot_duration = f"{sub['timeslot_start']} to {sub['timeslot_end']}" if 'timeslot_start' in sub and 'timeslot_end' in sub and sub['timeslot_start'] and sub['timeslot_end'] else sub['timeslot_name']
+                message = (
+                    f"🔔 *SUBSCRIPTION EXPIRY REMINDER*\n\n\n"
+                    f"Hello {name}!\n\n"
+                    "This is a reminder that your library subscription is expiring soon.\n\n\n"
+                    "📋 *Subscription Details:*\n"
+                    f"   • Seat Number: {sub['seat_number']}\n"
+                    f"   • Timeslot: {timeslot_duration}\n"
+                    f"   • Expiry Date: {sub['end_date']}\n\n\n"
+                    "Please visit us to renew your subscription before the expiry date to avoid cancellation.\n\n\n"
+                    f"📍 *{LIBRARY_NAME} Location:*\n"
+                    f"{LIBRARY_ADDRESS}\n\n\n"
+                    "📞 *Contact Information:*\n"
+                    f"   • Phone: {LIBRARY_PHONE}\n"
+                    f"   • Email: {LIBRARY_EMAIL}\n\n\n"
+                    f"Thank you for choosing {LIBRARY_NAME}!\n\n"
+                    "Best regards,\n"
+                    f"{LIBRARY_NAME} Team"
+                )
+            else:
+                subs_details = "\n".join([f"   • Seat {sub['seat_number']} | {sub['timeslot_start'] + ' to ' + sub['timeslot_end'] if 'timeslot_start' in sub and 'timeslot_end' in sub and sub['timeslot_start'] and sub['timeslot_end'] else sub['timeslot_name']} | Expires: {sub['end_date']}" for sub in subscriptions])
+                message = (
+                    "🔔 *MULTIPLE SUBSCRIPTION REMINDERS*\n\n\n"
+                    f"Hello {name}!\n\n"
+                    "You have {len(subscriptions)} library subscriptions expiring soon.\n\n\n"
+                    "📋 *Subscription Details:*\n"
+                    f"{subs_details}\n\n\n"
+                    "Please visit us to renew your subscriptions before the expiry dates to avoid cancellation.\n\n\n"
+                    f"📍 *{LIBRARY_NAME} Location:*\n"
+                    f"{LIBRARY_ADDRESS}\n\n\n"
+                    "📞 *Contact Information:*\n"
+                    f"   • Phone: {LIBRARY_PHONE}\n"
+                    f"   • Email: {LIBRARY_EMAIL}\n\n\n"
+                    f"Thank you for choosing {LIBRARY_NAME}!\n\n"
+                    "Best regards,\n"
+                    f"{LIBRARY_NAME} Team"
+                )
+            
+            messages.append({'name': name, 'phone': phone, 'message': message})
         
-        return self.send_message(subscription_data['mobile_number'], message)
+        return self.send_bulk_messages(messages)
+
+    def test_message_with_emojis(self, phone_number):
+        """Test sending a message with emojis to verify they display correctly"""
+        test_message = f"""
+🧪 Test Message from {LIBRARY_NAME}
+
+This is a test to verify emoji display:
+📍 Location: {LIBRARY_ADDRESS}
+📞 Phone: {LIBRARY_PHONE}
+📧 Email: {LIBRARY_EMAIL}
+
+Common symbols:
+✅ Check mark
+❌ Cross mark
+⚠️ Warning
+ℹ️ Information
+🔍 Search
+📱 Mobile
+💬 Message
+
+If you can see all the emojis above correctly, the messaging system is working properly!
+
+Thank you for testing {LIBRARY_NAME}!
+        """.strip()
+        
+        return self.send_message(phone_number, test_message)
     
+    def __del__(self):
+        """Cleanup when object is destroyed"""
+        if self.driver:
+            try:
+                self.driver.quit()
+            except Exception:
+                pass
+
     def close_driver(self):
         """Close the WebDriver"""
         try:
@@ -1546,64 +1610,6 @@ class WhatsAppAutomation:
         
         result['diagnostics'] = diagnostics
         return result
-    
-    def send_consolidated_reminders(self, expiring_subscriptions):
-        """Send subscription expiry reminders as consolidated messages per student"""
-        # Group subscriptions by student
-        student_groups = {}
-        for subscription in expiring_subscriptions:
-            phone = subscription['mobile_number']
-            if phone not in student_groups:
-                student_groups[phone] = {
-                    'name': subscription['student_name'],
-                    'subscriptions': []
-                }
-            student_groups[phone]['subscriptions'].append(subscription)
-        
-        messages = []
-        for phone, data in student_groups.items():
-            name = data['name']
-            subscriptions = data['subscriptions']
-            
-            if len(subscriptions) == 1:
-                sub = subscriptions[0]
-                timeslot_duration = f"{sub['timeslot_start']} to {sub['timeslot_end']}" if 'timeslot_start' in sub and 'timeslot_end' in sub and sub['timeslot_start'] and sub['timeslot_end'] else sub['timeslot_name']
-                message = (
-                    "🔔 *SUBSCRIPTION REMINDER*\n\n"
-                    f"Hello {name}!\n\n"
-                    "This is a reminder that your library subscription is expiring soon.\n\n"
-                    "📋 *Subscription Details:*\n"
-                    f"   • Seat Number: {sub['seat_number']}\n"
-                    f"   • Timeslot: {timeslot_duration}\n"
-                    f"   • Expiry Date: {sub['end_date']}\n\n"
-                    "Please visit us to renew your subscription before the expiry date to avoid cancellation.\n\n"
-                    f"📍 *{LIBRARY_NAME} Location:*\n"
-                    f"{LIBRARY_ADDRESS}\n\n"
-                    "📞 *Contact Information:*\n"
-                    f"   • Phone: {LIBRARY_PHONE}\n"
-                    f"   • Email: {LIBRARY_EMAIL}\n\n"
-                    f"Thank you for choosing {LIBRARY_NAME}!"
-                )
-            else:
-                subs_details = "\n".join([f"   • Seat {sub['seat_number']} | {sub['timeslot_start'] + ' to ' + sub['timeslot_end'] if 'timeslot_start' in sub and 'timeslot_end' in sub and sub['timeslot_start'] and sub['timeslot_end'] else sub['timeslot_name']} | Expires: {sub['end_date']}" for sub in subscriptions])
-                message = (
-                    "🔔 *MULTIPLE SUBSCRIPTION REMINDERS*\n\n"
-                    f"Hello {name}!\n\n"
-                    f"You have {len(subscriptions)} library subscriptions expiring soon.\n\n"
-                    "📋 *Subscription Details:*\n"
-                    f"{subs_details}\n\n"
-                    "Please visit us to renew your subscriptions before the expiry dates to avoid cancellation.\n\n"
-                    f"📍 *{LIBRARY_NAME} Location:*\n"
-                    f"{LIBRARY_ADDRESS}\n\n"
-                    "📞 *Contact Information:*\n"
-                    f"   • Phone: {LIBRARY_PHONE}\n"
-                    f"   • Email: {LIBRARY_EMAIL}\n\n"
-                    f"Thank you for choosing {LIBRARY_NAME}!"
-                )
-            
-            messages.append({'name': name, 'phone': phone, 'message': message})
-        
-        return self.send_bulk_messages(messages)
 
     def test_message_with_emojis(self, phone_number):
         """Test sending a message with emojis to verify they display correctly"""

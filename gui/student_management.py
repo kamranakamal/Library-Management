@@ -1683,7 +1683,7 @@ class SubscriptionRenewalDialog(tk.Toplevel):
                     'total_amount': self.subscription.amount_paid
                 }
                 
-                success, result = pdf_generator._generate_renewal_receipt_from_data(renewal_data)
+                success, result = pdf_generator._generate_subscription_receipt_from_data(renewal_data)
                 
                 if success:
                     logging.info(f"Renewal receipt generated: {result}")

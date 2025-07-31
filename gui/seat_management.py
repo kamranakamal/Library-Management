@@ -257,21 +257,26 @@ class SeatManagementFrame(ttk.Frame):
                     # Determine seat color based on gender restriction and occupancy
                     color = self.get_seat_color(seat)
                     
+                    # Create a unique tag for the seat
+                    seat_tag = f"seat_{seat.id}"
+
                     # Draw seat rectangle
-                    seat_rect = self.seat_canvas.create_rectangle(
+                    self.seat_canvas.create_rectangle(
                         x, y, x + seat_size, y + seat_size,
-                        fill=color, outline='black', width=2
+                        fill=color, outline='black', width=2,
+                        tags=(seat_tag,)
                     )
                     
                     # Draw seat number
                     self.seat_canvas.create_text(
                         x + seat_size/2, y + seat_size/2,
-                        text=str(seat.id), font=('Arial', 9, 'bold')
+                        text=str(seat.id), font=('Arial', 9, 'bold'),
+                        tags=(seat_tag,)
                     )
                     
-                    # Bind click event
-                    self.seat_canvas.tag_bind(seat_rect, '<Button-1>', 
-                                            lambda e, s=seat: self.select_seat(s))
+                    # Bind click event to the tag, making both rectangle and text clickable
+                    self.seat_canvas.tag_bind(seat_tag, '<Button-1>', 
+                                            lambda event, s=seat: self.select_seat(s))
                     
                     seats_in_current_row += 1
             
